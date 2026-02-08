@@ -1,5 +1,3 @@
-# mirai-console-plugin-template
+# xiaozhangup-bot
 
-[Mirai Console](https://github.com/mamoe/mirai-console) 插件模板, 使用 Kotlin + Gradle.
-
-[如何使用](https://github.com/project-mirai/how-to-use-plugin-template)
+自用机器人，目的是方便处理我的各种消息通知。
