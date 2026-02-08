@@ -69,7 +69,7 @@ class OverflowBot : LifeCycle {
     }
 
     private suspend fun asMessage(chain: MessageChain): List<MessageComponent> {
-        return chain.map { msg ->
+        return chain.mapNotNull { msg ->
             when(msg) {
                 is Image -> {
                     ImageComponent(msg.queryUrl())
@@ -83,9 +83,14 @@ class OverflowBot : LifeCycle {
                     AtComponent(msg.target.toString())
                 }
 
+                is AtAll -> {
+                    AtComponent("all")
+                }
+
                 else -> {
-                    // TODO 默认处理
-                    StringComponent(msg.content)
+                    val content = msg.content
+                    if (content.isEmpty()) null
+                    else StringComponent(msg.content)
                 }
             }
         }

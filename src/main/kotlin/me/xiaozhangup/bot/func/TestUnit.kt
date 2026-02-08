@@ -10,7 +10,11 @@ class TestUnit : EventUnit(
     1
 ) {
     override fun onGroupMessage(message: Message) {
-        message.source.sendMessage("Hello World!")
+        message.source.sendMessage(
+            message.component.joinToString("\n") {
+                "${it.type}: ${it.context}"
+            }
+        )
         message.addReaction(Reaction.LIKE)
     }
 }

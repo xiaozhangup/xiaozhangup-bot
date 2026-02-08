@@ -13,6 +13,10 @@ abstract class Message(
         throw NotImplementedError()
     }
 
+    open fun getMessage(): String {
+        return component.joinToString("") { it.context }
+    }
+
     enum class Type {
         GROUP,
         USER
