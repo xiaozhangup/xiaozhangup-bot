@@ -7,7 +7,7 @@ plugins {
     id("net.mamoe.mirai-console") version "2.16.0"
 }
 
-group = "org.example"
+group = "me.xiaozhangup.bot"
 version = "0.1.0"
 
 repositories {
@@ -19,7 +19,7 @@ repositories {
 
 buildConfig {
     className("BuildConstants")
-    packageName("org.example.mirai.plugin")
+    packageName("me.xiaozhangup.bot")
     useKotlinOutput()
 
     buildConfigField("String", "VERSION", "\"${project.version}\"")
