@@ -61,7 +61,8 @@ class OverflowBot : LifeCycle {
 //                    } ?: emptyList() 不支持漫游
                     emptyList()
                 ),
-                asReaction(this.reaction)
+                asReaction(this.reaction),
+                this.operation
             )
         }
         logger.info("[EventBus] Event listeners registered.")

@@ -13,5 +13,5 @@ abstract class EventUnit(
 
     open fun onFriendMessage(message: Message) {}
 
-    open fun onMessageReaction(message: Message, reaction: Reaction) {}
+    open fun onMessageReaction(message: Message, reaction: Reaction, operation: Boolean) {}
 }

@@ -13,8 +13,8 @@ class EventTrigger {
         EventBus.getEvents().forEach { it.onFriendMessage(message) }
     }
 
-    fun triggerMessageReaction(message: Message, reaction: Reaction) {
-        EventBus.getEvents().forEach { it.onMessageReaction(message, reaction) }
+    fun triggerMessageReaction(message: Message, reaction: Reaction, operation: Boolean) {
+        EventBus.getEvents().forEach { it.onMessageReaction(message, reaction, operation) }
     }
 
 }
