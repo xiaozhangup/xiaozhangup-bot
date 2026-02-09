@@ -1,0 +1,60 @@
+package me.xiaozhangup.bot.ove
+
+import kotlinx.coroutines.launch
+import me.xiaozhangup.bot.port.Message
+import me.xiaozhangup.bot.port.Reaction
+import me.xiaozhangup.bot.port.msg.MessageComponent
+import me.xiaozhangup.bot.port.msg.obj.AtComponent
+import me.xiaozhangup.bot.port.msg.obj.ImageComponent
+import me.xiaozhangup.bot.port.msg.obj.StringComponent
+import net.mamoe.mirai.contact.User
+import net.mamoe.mirai.message.data.At
+import net.mamoe.mirai.message.data.AtAll
+import net.mamoe.mirai.message.data.MessageSource
+import net.mamoe.mirai.message.data.PlainText
+import net.mamoe.mirai.message.data.QuoteReply
+import net.mamoe.mirai.message.data.buildMessageChain
+
+class OverFriendMessage(
+    val user: User,
+    val msgId: Int,
+    val msgSource: MessageSource,
+    val components: List<MessageComponent>
+) : Message(
+    OverUser(user),
+    Message.Type.USER,
+    msgId,
+    components
+) {
+    override fun addReaction(reaction: Reaction, boolean: Boolean) {
+        throw NotImplementedError("Friend message does not support reactions")
+    }
+
+    override fun addReply(message: String) {
+        user.launch {
+            user.sendMessage(
+                QuoteReply(msgSource) + PlainText(message)
+            )
+        }
+    }
+
+    override fun addReplay(vararg messages: MessageComponent) {
+        user.launch {
+            val message = buildMessageChain {
+                messages.forEach { comp ->
+                    when (comp) {
+                        is StringComponent -> +PlainText(comp.context)
+                        is AtComponent -> comp.context.toLongOrNull()
+                            ?.let { +At(it) }
+                            ?: +AtAll
+                        is ImageComponent -> TODO()
+                        else -> +PlainText(comp.context)
+                    }
+                }
+            }
+            user.sendMessage(
+                QuoteReply(msgSource) + message
+            )
+        }
+    }
+}

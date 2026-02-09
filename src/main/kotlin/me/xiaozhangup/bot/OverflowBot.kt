@@ -1,9 +1,9 @@
 package me.xiaozhangup.bot
 
-import kotlinx.coroutines.flow.firstOrNull
 import me.xiaozhangup.bot.func.TestUnit
-import me.xiaozhangup.bot.ove.OveFriendMessage
-import me.xiaozhangup.bot.ove.OveGroupMessage
+import me.xiaozhangup.bot.ove.OverFriendMessage
+import me.xiaozhangup.bot.ove.OverGroupMessage
+import me.xiaozhangup.bot.port.Contact
 import me.xiaozhangup.bot.port.LifeCycle
 import me.xiaozhangup.bot.port.Reaction
 import me.xiaozhangup.bot.port.event.EventBus
@@ -11,6 +11,7 @@ import me.xiaozhangup.bot.port.msg.MessageComponent
 import me.xiaozhangup.bot.port.msg.obj.AtComponent
 import me.xiaozhangup.bot.port.msg.obj.ImageComponent
 import me.xiaozhangup.bot.port.msg.obj.StringComponent
+import net.mamoe.mirai.Bot
 import net.mamoe.mirai.event.GlobalEventChannel
 import net.mamoe.mirai.event.events.FriendMessageEvent
 import net.mamoe.mirai.event.events.GroupMessageEvent
@@ -22,33 +23,37 @@ class OverflowBot : LifeCycle {
 
     private val plugin = PluginMain
     private val logger = plugin.logger
+    private val contact by lazy { OverflowContact(Bot.instances[0]) }
 
     override fun onEnable() {
         logger.info("[EventBus] Registering event listeners...")
         val eventChannel = GlobalEventChannel.parentScope(plugin)
         eventChannel.subscribeAlways<GroupMessageEvent> {
             EventBus.getTrigger().triggerGroupMessage(
-                OveGroupMessage(
+                OverGroupMessage(
                     this.group,
                     this.source.ids.getOrNull(0) ?: -1,
+                    this.source,
                     asMessage(this.message)
                 )
             )
         }
         eventChannel.subscribeAlways<FriendMessageEvent> {
             EventBus.getTrigger().triggerFriendMessage(
-                OveFriendMessage(
+                OverFriendMessage(
                     this.user,
                     this.source.ids.getOrNull(0) ?: -1,
+                    this.source,
                     asMessage(this.message)
                 )
             )
         }
         eventChannel.subscribeAlways<MessageReactionEvent> {
             EventBus.getTrigger().triggerMessageReaction(
-                OveGroupMessage(
+                OverGroupMessage(
                     this.group,
                     this.messageId,
+                    null,
 //                    this.group.roamingMessages.getAllMessages {
 //                        it.ids[0] == this.messageId
 //                    }.firstOrNull()?.let {
@@ -66,6 +71,10 @@ class OverflowBot : LifeCycle {
 
     override fun onDisable() {
         logger.info("[EventBus] Goodbye!")
+    }
+
+    override fun getContact(): Contact {
+        return contact
     }
 
     private suspend fun asMessage(chain: MessageChain): List<MessageComponent> {

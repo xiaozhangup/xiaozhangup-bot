@@ -6,4 +6,5 @@ interface LifeCycle {
 
     fun onDisable() { }
 
+    fun getContact(): Contact
 }

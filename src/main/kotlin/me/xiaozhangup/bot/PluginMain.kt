@@ -1,5 +1,6 @@
 package me.xiaozhangup.bot
 
+import me.xiaozhangup.bot.port.LifeCycle
 import net.mamoe.mirai.console.plugin.jvm.JvmPluginDescription
 import net.mamoe.mirai.console.plugin.jvm.KotlinPlugin
 import top.mrxiaom.overflow.BuildConstants
@@ -14,7 +15,7 @@ object PluginMain : KotlinPlugin(
     }
 ) {
 
-    private val overflowBot = OverflowBot()
+    val overflowBot: LifeCycle = OverflowBot()
 
     override fun onEnable() {
         overflowBot.onEnable()

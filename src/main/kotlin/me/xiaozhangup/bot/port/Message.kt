@@ -9,7 +9,15 @@ abstract class Message(
     val component: List<MessageComponent>
 ) {
 
-    open fun addReaction(reaction: Reaction) {
+    open fun addReaction(reaction: Reaction, boolean: Boolean = true) {
+        throw NotImplementedError()
+    }
+
+    open fun addReply(message: String) {
+        throw NotImplementedError()
+    }
+
+    open fun addReplay(vararg messages: MessageComponent) {
         throw NotImplementedError()
     }
 

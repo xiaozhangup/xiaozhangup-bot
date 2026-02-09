@@ -16,5 +16,6 @@ class TestUnit : EventUnit(
             }
         )
         message.addReaction(Reaction.LIKE)
+        message.addReply("我真的服气了")
     }
 }
