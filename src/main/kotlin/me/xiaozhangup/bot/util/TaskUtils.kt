@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import java.util.concurrent.TimeUnit
 
 object TaskUtils {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     fun submitDelay(
         time: Long,
@@ -11,14 +12,13 @@ object TaskUtils {
         block: suspend Task.() -> Unit
     ): Task {
         lateinit var job: Job
-        lateinit var task: Task
+        val task = Task { job }
 
-        job = GlobalScope.launch {
+        job = scope.launch {
             delay(unit.toMillis(time))
             task.block()
         }
 
-        task = Task(job)
         return task
     }
 
@@ -28,9 +28,9 @@ object TaskUtils {
         block: suspend Task.() -> Unit
     ): Task {
         lateinit var job: Job
-        lateinit var task: Task
+        val task = Task { job }
 
-        job = GlobalScope.launch {
+        job = scope.launch {
             val delayMillis = unit.toMillis(time)
             while (isActive) {
                 task.block()
@@ -38,33 +38,18 @@ object TaskUtils {
             }
         }
 
-        task = Task(job)
-        return task
-    }
-
-    fun submit(
-        block: suspend Task.() -> Unit
-    ): Task {
-        lateinit var job: Job
-        lateinit var task: Task
-
-        job = GlobalScope.launch {
-            task.block()
-        }
-
-        task = Task(job)
         return task
     }
 
     class Task internal constructor(
-        private val job: Job
+        private val jobProvider: () -> Job
     ) {
-        fun cancel() {
-            job.cancel()
-        }
-
         val isActive: Boolean
-            get() = job.isActive
+            get() = jobProvider().isActive
+
+        fun cancel() {
+            jobProvider().cancel()
+        }
     }
 }
 
@@ -87,5 +72,5 @@ fun submitRepeat(
 fun submit(
     block: suspend TaskUtils.Task.() -> Unit
 ): TaskUtils.Task {
-    return TaskUtils.submit(block)
+    return TaskUtils.submitDelay(0, TimeUnit.MICROSECONDS, block)
 }

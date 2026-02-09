@@ -1,6 +1,6 @@
 package me.xiaozhangup.bot
 
-import me.xiaozhangup.bot.func.TestUnit
+import me.xiaozhangup.bot.func.TaskAbstract
 import me.xiaozhangup.bot.ove.OverFriendMessage
 import me.xiaozhangup.bot.ove.OverGroupMessage
 import me.xiaozhangup.bot.port.Contact
@@ -18,11 +18,13 @@ import net.mamoe.mirai.event.events.GroupMessageEvent
 import net.mamoe.mirai.message.data.*
 import net.mamoe.mirai.message.data.Image.Key.queryUrl
 import top.mrxiaom.overflow.event.MessageReactionEvent
+import java.io.File
 
 class OverflowBot : LifeCycle {
 
     private val plugin = PluginMain
     private val logger = plugin.logger
+    private val dataFolder = plugin.dataFolder
     private val contact by lazy { OverflowContact(Bot.instances[0]) }
 
     override fun onEnable() {
@@ -67,7 +69,7 @@ class OverflowBot : LifeCycle {
         }
         logger.info("[EventBus] Event listeners registered.")
 
-        EventBus.register(TestUnit())
+        EventBus.register(TaskAbstract())
     }
 
     override fun onDisable() {
@@ -76,6 +78,10 @@ class OverflowBot : LifeCycle {
 
     override fun getContact(): Contact {
         return contact
+    }
+
+    override fun getDataFolder(): File {
+        return dataFolder
     }
 
     private suspend fun asMessage(chain: MessageChain): List<MessageComponent> {
@@ -114,6 +120,7 @@ class OverflowBot : LifeCycle {
             "424" -> Reaction.BUTTON
             "10068" -> Reaction.QUESTION
             "124" -> Reaction.OK
+            "10024" -> Reaction.SPARK
             else -> Reaction.QUESTION
         }
     }

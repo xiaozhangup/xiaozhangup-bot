@@ -9,7 +9,7 @@ class AIClient(
     private val systemPrompt: String,
     private val apiKey: String,
     private val baseUrl: String = "https://open.bigmodel.cn/api/paas/v4/",
-    private val model: String = "glm-4v-flash"
+    private val model: String = "glm-4.1v-thinking-flash"
 ) {
 
     private val json = Json {

@@ -38,7 +38,7 @@ class OverFriendMessage(
         }
     }
 
-    override fun addReplay(vararg messages: MessageComponent) {
+    override fun addReply(vararg messages: MessageComponent) {
         user.launch {
             val message = buildMessageChain {
                 messages.forEach { comp ->

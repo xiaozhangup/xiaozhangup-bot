@@ -6,5 +6,6 @@ enum class Reaction {
     HEART,
     BUTTON,
     OK,
-    QUESTION
+    QUESTION,
+    SPARK
 }

@@ -38,6 +38,7 @@ class OverGroupMessage(
                 Reaction.BUTTON -> "424"
                 Reaction.QUESTION -> "10068"
                 Reaction.OK -> "124"
+                Reaction.SPARK -> "10024"
             }
             group.asRemoteGroup.setMsgReaction(msgId, icon, boolean)
         }
@@ -55,7 +56,7 @@ class OverGroupMessage(
         }
     }
 
-    override fun addReplay(vararg messages: MessageComponent) {
+    override fun addReply(vararg messages: MessageComponent) {
         group.launch {
             val message = buildMessageChain {
                 messages.forEach { comp ->

@@ -17,7 +17,7 @@ abstract class Message(
         throw NotImplementedError()
     }
 
-    open fun addReplay(vararg messages: MessageComponent) {
+    open fun addReply(vararg messages: MessageComponent) {
         throw NotImplementedError()
     }
 
