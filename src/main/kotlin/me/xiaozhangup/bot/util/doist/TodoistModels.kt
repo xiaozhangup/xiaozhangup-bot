@@ -120,6 +120,8 @@ data class CreateTaskRequest(
     val dueString: String? = null,
     @SerialName("due_date")
     val dueDate: String? = null,
+    @SerialName("due_lang")
+    val dueLang: String? = null,
     val labels: List<String>? = null
 )
 

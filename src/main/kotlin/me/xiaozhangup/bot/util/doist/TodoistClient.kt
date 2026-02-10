@@ -267,7 +267,9 @@ class TodoistClient(private val token: String) {
         sectionId: String? = null,
         description: String? = null,
         priority: Int? = null,
-        dueString: String? = null
+        dueString: String? = null,
+        dueDate: String? = null,
+        dueLang: String? = null
     ): Task {
         val request = CreateTaskRequest(
             content = content,
@@ -275,7 +277,9 @@ class TodoistClient(private val token: String) {
             sectionId = sectionId,
             description = description,
             priority = priority,
-            dueString = dueString
+            dueString = dueString,
+            dueDate = dueDate,
+            dueLang = dueLang
         )
         return createTask(request)
     }
