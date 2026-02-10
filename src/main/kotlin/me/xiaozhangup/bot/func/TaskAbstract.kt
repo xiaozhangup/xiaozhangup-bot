@@ -10,6 +10,7 @@ import me.xiaozhangup.bot.port.Reaction
 import me.xiaozhangup.bot.port.msg.obj.AtComponent
 import me.xiaozhangup.bot.port.unit.EventUnit
 import me.xiaozhangup.bot.util.ai.AIClient
+import me.xiaozhangup.bot.util.doist.TodoistClient
 import me.xiaozhangup.bot.util.getDataFolder
 import me.xiaozhangup.bot.util.obj.FixedSizeMap
 import me.xiaozhangup.bot.util.submit
@@ -35,6 +36,13 @@ class TaskAbstract : EventUnit(
             props.load(it)
         }
         props
+    }
+    private val doistClient by lazy {
+        val token = config.getProperty("doist.token")
+        if (token.isNullOrBlank()) {
+            throw IllegalStateException("Todoist API token is not set in task_abstract.properties")
+        }
+        TodoistClient(token)
     }
     private val aiClient by lazy {
         val apiKey = config.getProperty("api.key")
@@ -85,6 +93,10 @@ class TaskAbstract : EventUnit(
             }
         ) {
             abstractTask(message)
+        }
+
+        doistClient.getSections().forEach {
+            warning("Section: ${it.name} (ID: ${it.id})")
         }
     }
 
