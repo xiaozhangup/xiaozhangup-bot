@@ -1,5 +1,6 @@
 package me.xiaozhangup.bot.util
 
+import me.xiaozhangup.bot.PluginMain
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -14,4 +15,16 @@ fun properties(name: String): Properties {
             StandardCharsets.UTF_8
         ).use { reader -> load(reader) }
     }
+}
+
+fun dataFolder(name: String): File {
+    val dir = File(getDataFolder(), name)
+    if (!dir.exists()) {
+        dir.mkdirs()
+    }
+    return dir
+}
+
+fun getDataFolder(): File {
+    return PluginMain.overflowBot.getDataFolder()
 }

@@ -12,7 +12,3 @@ fun getGroup(id: String): Group? {
 fun getUser(id: String): User? {
     return PluginMain.overflowBot.getContact().getUser(id)
 }
-
-fun getDataFolder(): File {
-    return PluginMain.overflowBot.getDataFolder()
-}

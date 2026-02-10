@@ -10,13 +10,18 @@ import me.xiaozhangup.bot.port.Reaction
 import me.xiaozhangup.bot.port.msg.obj.AtComponent
 import me.xiaozhangup.bot.port.unit.EventUnit
 import me.xiaozhangup.bot.util.ai.AIClient
+import me.xiaozhangup.bot.util.dataFolder
 import me.xiaozhangup.bot.util.doist.TodoistClient
+import me.xiaozhangup.bot.util.getDataFolder
 import me.xiaozhangup.bot.util.getGroup
 import me.xiaozhangup.bot.util.info
 import me.xiaozhangup.bot.util.obj.FixedSizeMap
+import me.xiaozhangup.bot.util.obj.TagMessageStore
+import me.xiaozhangup.bot.util.obj.TextSimilarityStore
 import me.xiaozhangup.bot.util.properties
 import me.xiaozhangup.bot.util.submit
 import me.xiaozhangup.bot.util.warning
+import java.io.File
 
 
 class TaskAbstract : EventUnit(
@@ -26,6 +31,8 @@ class TaskAbstract : EventUnit(
 ) {
     private val history = mutableMapOf<String, FixedSizeMap<Int, Message>>()
     private val config by lazy { properties("task_abstract") }
+    private val tagStore by lazy { TagMessageStore(dataFolder("task_abstract")) }
+    private val similarityStore by lazy { TextSimilarityStore(12, File(getDataFolder(), "task_abstract.store")) }
     private val doistClient by lazy {
         val token = config.getProperty("doist.token")
         if (token.isNullOrBlank()) {
@@ -147,11 +154,16 @@ class TaskAbstract : EventUnit(
 
     private fun abstractTask(message: Message) {
         val source = message.source
+        val raw = message.getMessage()
         if (source is Group && source.id == notificationGroup.id) {
             message.addReaction(Reaction.SPARK)
         }
+        if (similarityStore.insert(raw) > 0.8) {
+            message.replyOrSend("与历史消息高度相似，已忽略")
+            return
+        }
         submit {
-            val task = fetchResult(message.getMessage())
+            val task = fetchResult(raw)
             if (task == null) {
                 message.replyOrSend("无法解析该消息内容，未能提取到有效任务信息")
                 return@submit
@@ -163,10 +175,10 @@ class TaskAbstract : EventUnit(
                         content = task.taskTitle,
                         description = buildString {
                             if (task.taskSubject.isNotBlank()) {
-                                append("${task.taskSubject}\n\n")
+                                append(task.taskSubject)
                             }
                             if (task.attachments.isNotEmpty()) {
-                                append("附件: ")
+                                append("\n\n附件: ")
                                 var index = 1
                                 task.attachments.forEach { att ->
                                     append("\n${index++}. $att")
@@ -175,6 +187,7 @@ class TaskAbstract : EventUnit(
                             if (task.relatedTime.isNotBlank()) {
                                 append("\n\n时间: ${task.relatedTime}")
                             }
+                            append("\n\n来自: ${source.name} (${source.id})\n原始消息:\n$raw")
                         },
                         sectionId = sectionId,
                         dueString = task.earliestTime
@@ -182,24 +195,24 @@ class TaskAbstract : EventUnit(
                     info("[TaskAbstract] Created task '${task.taskTitle}' in Todoist.")
 
                     var index = 1
-                    message.replyOrSend(
-                        buildString {
-                            append("${task.taskTitle}\n\n")
-                            if (task.relatedTime.isNotBlank()) {
-                                append("时间: \n${task.relatedTime}\n\n")
-                            }
-                            if (task.attachments.isNotEmpty()) {
-                                append("附件: ")
-                                task.attachments.forEach { att ->
-                                    append("\n${index++}. $att")
-                                }
-                            }
-                            if (task.taskSubject.isNotBlank()) {
-                                append("\n\n${task.taskSubject}")
-                            }
-                            append("\n\n#任务 #${message.id}")
+                    val msg = buildString {
+                        append("${task.taskTitle}\n\n")
+                        if (task.relatedTime.isNotBlank()) {
+                            append("时间: \n${task.relatedTime}\n\n")
                         }
-                    )
+                        if (task.attachments.isNotEmpty()) {
+                            append("附件: ")
+                            task.attachments.forEach { att ->
+                                append("\n${index++}. $att")
+                            }
+                        }
+                        if (task.taskSubject.isNotBlank()) {
+                            append("\n\n${task.taskSubject}")
+                        }
+                        append("\n\n#任务 #${message.id}")
+                    }
+                    tagStore.insert(msg)
+                    message.replyOrSend(msg)
                 } else {
                     message.replyOrSend("该消息未包含任务信息，未创建任务")
                 }
