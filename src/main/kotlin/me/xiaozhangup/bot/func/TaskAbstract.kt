@@ -4,23 +4,19 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import me.xiaozhangup.bot.port.Group
 import me.xiaozhangup.bot.port.Message
 import me.xiaozhangup.bot.port.Reaction
 import me.xiaozhangup.bot.port.msg.obj.AtComponent
 import me.xiaozhangup.bot.port.unit.EventUnit
 import me.xiaozhangup.bot.util.ai.AIClient
 import me.xiaozhangup.bot.util.doist.TodoistClient
-import me.xiaozhangup.bot.util.getDataFolder
+import me.xiaozhangup.bot.util.getGroup
 import me.xiaozhangup.bot.util.info
 import me.xiaozhangup.bot.util.obj.FixedSizeMap
 import me.xiaozhangup.bot.util.properties
 import me.xiaozhangup.bot.util.submit
 import me.xiaozhangup.bot.util.warning
-import java.io.File
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
-import java.nio.file.Paths
-import java.util.*
 
 
 class TaskAbstract : EventUnit(
@@ -28,7 +24,7 @@ class TaskAbstract : EventUnit(
     "任务摘要工具",
     1
 ) {
-    private val history = FixedSizeMap<Int, Message>(30)
+    private val history = mutableMapOf<String, FixedSizeMap<Int, Message>>()
     private val config by lazy { properties("task_abstract") }
     private val doistClient by lazy {
         val token = config.getProperty("doist.token")
@@ -36,6 +32,16 @@ class TaskAbstract : EventUnit(
             throw IllegalStateException("Todoist API token is not set in task_abstract.properties")
         }
         TodoistClient(token)
+    }
+    private val notificationGroup by lazy {
+        getGroup(config.getProperty("notification.group"))
+            ?: throw IllegalStateException("Notification group not found: ${config.getProperty("notification.group")}")
+    }
+    private val snifferGroups by lazy {
+        config.getProperty("sniffer.groups")?.split(',') ?: listOf()
+    }
+    private val snifferWords by lazy {
+        config.getProperty("sniffer.words")?.split(',') ?: listOf()
     }
     private val doistSection by lazy {
         config.getProperty("doist.section")
@@ -119,28 +125,34 @@ class TaskAbstract : EventUnit(
     }
 
     override fun onGroupMessage(message: Message) {
-        history[message.id] = message
-        if (message.getMessage().contains("@全体成员") || message.component.any {
+        if (!snifferGroups.contains(message.source.id)) return
+        history.getOrPut(message.source.id) { FixedSizeMap(32) }[message.id] = message
+        val raw = message.getMessage()
+        if (raw.contains("@全体成员") || message.component.any {
                 it is AtComponent && it.context == "all"
-            }
+            } || snifferWords.any { raw.contains(it) }
         ) {
             abstractTask(message)
         }
     }
 
     override fun onMessageReaction(message: Message, reaction: Reaction, operation: Boolean) {
-        val msg = history[message.id] ?: return
+        if (!operation) return
+        val msg = history[message.source.id]?.get(message.id) ?: return
         if (reaction == Reaction.BUTTON) {
             abstractTask(msg)
         }
     }
 
     private fun abstractTask(message: Message) {
-        message.addReaction(Reaction.SPARK)
+        val source = message.source
+        if (source is Group && source.id == notificationGroup.id) {
+            message.addReaction(Reaction.SPARK)
+        }
         submit {
             val task = fetchResult(message.getMessage())
             if (task == null) {
-                message.addReply("无法解析该消息内容，未能提取到有效任务信息。")
+                message.replyOrSend("无法解析该消息内容，未能提取到有效任务信息")
                 return@submit
             }
 
@@ -153,7 +165,11 @@ class TaskAbstract : EventUnit(
                                 append("${task.taskSubject}\n\n")
                             }
                             if (task.attachments.isNotEmpty()) {
-                                append("附件:\n - ${task.attachments.joinToString("\n - ")}")
+                                append("附件: ")
+                                var index = 1
+                                task.attachments.forEach { att ->
+                                    append("\n${index++}. $att")
+                                }
                             }
                             if (task.relatedTime.isNotBlank()) {
                                 append("\n\n时间: ${task.relatedTime}")
@@ -164,27 +180,43 @@ class TaskAbstract : EventUnit(
                     )
                     info("[TaskAbstract] Created task '${task.taskTitle}' in Todoist.")
 
-                    message.addReply(
-                        "${task.taskTitle}\n\n" +
-                            "时间: ${
-                                if (task.relatedTime.isBlank()) "无" else "\n" + task.relatedTime
-                            }\n\n" +
-                            "附件: ${
-                                if (task.attachments.isEmpty()) "无" else "\n - " + task.attachments.joinToString(
-                                    "\n - "
-                                )
-                            }" +
-                            (if (task.taskSubject.isBlank()) "" else "\n\n" + task.taskSubject) +
-                            "\n\n#${message.id} #任务"
+                    var index = 1
+                    message.replyOrSend(
+                        buildString {
+                            append("${task.taskTitle}\n\n")
+                            if (task.relatedTime.isNotBlank()) {
+                                append("时间: \n${task.relatedTime}\n\n")
+                            }
+                            if (task.attachments.isNotEmpty()) {
+                                append("附件: ")
+                                task.attachments.forEach { att ->
+                                    append("\n${index++}. $att")
+                                }
+                            }
+                            if (task.taskSubject.isNotBlank()) {
+                                append("\n\n${task.taskSubject}")
+                            }
+                            append("\n\n#任务 #${message.id}")
+                        }
                     )
                 } else {
-                    message.addReply("该消息未包含任务信息，未创建任务")
+                    message.replyOrSend("该消息未包含任务信息，未创建任务")
                 }
             } catch (e: Throwable) {
-                message.addReply("添加 Todoist 任务时出错: ${e.message}")
+                message.replyOrSend("添加 Todoist 任务时出错: ${e.message}")
                 e.printStackTrace()
                 return@submit
             }
+        }
+    }
+
+    private fun Message.replyOrSend(msg: String) {
+        if (source is Group && source.id == notificationGroup.id) {
+            addReply(msg)
+        } else {
+            notificationGroup.sendMessage(
+                "$msg\n\n来自: ${source.name} (${source.id})\n原文:\n${getMessage().take(69)}"
+            )
         }
     }
 
