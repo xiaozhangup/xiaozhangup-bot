@@ -138,6 +138,7 @@ class TaskAbstract : EventUnit(
 
     override fun onMessageReaction(message: Message, reaction: Reaction, operation: Boolean) {
         if (!operation) return
+        if (message.source.id != notificationGroup.id) return
         val msg = history[message.source.id]?.get(message.id) ?: return
         if (reaction == Reaction.BUTTON) {
             abstractTask(msg)
