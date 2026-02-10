@@ -196,12 +196,12 @@ class TaskAbstract : EventUnit(
 
                     var index = 1
                     val msg = buildString {
-                        append("${task.taskTitle}\n\n")
+                        append(task.taskTitle)
                         if (task.relatedTime.isNotBlank()) {
-                            append("时间: \n${task.relatedTime}\n\n")
+                            append("\n\n时间: \n${task.relatedTime}")
                         }
                         if (task.attachments.isNotEmpty()) {
-                            append("附件: ")
+                            append("\n\n附件: ")
                             task.attachments.forEach { att ->
                                 append("\n${index++}. $att")
                             }
