@@ -1,7 +1,8 @@
 package me.xiaozhangup.bot.util.obj
 
 import me.xiaozhangup.bot.util.extractTags
-import java.io.*
+import java.io.File
+import java.io.RandomAccessFile
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 

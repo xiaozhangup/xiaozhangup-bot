@@ -4,7 +4,7 @@ import me.xiaozhangup.bot.PluginMain
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.util.Properties
+import java.util.*
 
 fun properties(name: String): Properties {
     val file = File(getDataFolder(), "$name.properties")

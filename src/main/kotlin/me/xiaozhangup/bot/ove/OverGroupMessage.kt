@@ -3,23 +3,19 @@ package me.xiaozhangup.bot.ove
 import kotlinx.coroutines.launch
 import me.xiaozhangup.bot.port.Message
 import me.xiaozhangup.bot.port.Reaction
+import me.xiaozhangup.bot.port.Source
 import me.xiaozhangup.bot.port.msg.MessageComponent
 import me.xiaozhangup.bot.port.msg.obj.AtComponent
 import me.xiaozhangup.bot.port.msg.obj.ImageComponent
 import me.xiaozhangup.bot.port.msg.obj.StringComponent
 import net.mamoe.mirai.contact.Group
-import net.mamoe.mirai.message.data.At
-import net.mamoe.mirai.message.data.AtAll
-import net.mamoe.mirai.message.data.Image
-import net.mamoe.mirai.message.data.MessageChain
-import net.mamoe.mirai.message.data.MessageSource
-import net.mamoe.mirai.message.data.PlainText
-import net.mamoe.mirai.message.data.QuoteReply
-import net.mamoe.mirai.message.data.buildMessageChain
+import net.mamoe.mirai.contact.Member
+import net.mamoe.mirai.message.data.*
 import top.mrxiaom.overflow.contact.RemoteGroup.Companion.asRemoteGroup
 
 class OverGroupMessage(
     val group: Group,
+    val sender: Member?,
     val msgId: Int,
     val msgSource: MessageSource?,
     val components: List<MessageComponent>
@@ -78,5 +74,9 @@ class OverGroupMessage(
                 QuoteReply(msgSource) + message
             )
         }
+    }
+
+    override fun getSender(): Source? {
+        return sender?.let { OverUser(it) }
     }
 }

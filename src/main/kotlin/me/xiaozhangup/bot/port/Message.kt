@@ -25,6 +25,10 @@ abstract class Message(
         return component.joinToString("") { it.context }
     }
 
+    open fun getSender(): Source? {
+        throw NotImplementedError()
+    }
+
     enum class Type {
         GROUP,
         USER

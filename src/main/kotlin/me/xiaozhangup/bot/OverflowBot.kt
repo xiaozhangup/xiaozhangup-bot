@@ -34,6 +34,7 @@ class OverflowBot : LifeCycle {
             EventBus.getTrigger().triggerGroupMessage(
                 OverGroupMessage(
                     this.group,
+                    this.sender,
                     this.source.ids.getOrNull(0) ?: -1,
                     this.source,
                     asMessage(this.message)
@@ -54,6 +55,7 @@ class OverflowBot : LifeCycle {
             EventBus.getTrigger().triggerMessageReaction(
                 OverGroupMessage(
                     this.group,
+                    this.operator,
                     this.messageId,
                     null,
 //                    this.group.roamingMessages.getAllMessages {

@@ -1,8 +1,8 @@
 package me.xiaozhangup.bot.util.doist
 
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.builtins.ListSerializer
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
