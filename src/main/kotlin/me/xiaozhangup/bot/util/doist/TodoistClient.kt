@@ -1,6 +1,7 @@
 package me.xiaozhangup.bot.util.doist
 
-import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.BufferedReader
@@ -8,21 +9,23 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 /**
  * Todoist API 客户端
- * 使用 java.net 进行网络访问
  *
  * @param token Todoist API token
  */
 class TodoistClient(private val token: String) {
 
     companion object {
-        private const val BASE_URL = "https://api.todoist.com/rest/v2"
+        private const val BASE_URL = "https://api.todoist.com/api/v1"
+        @OptIn(ExperimentalSerializationApi::class)
         private val json = Json {
             ignoreUnknownKeys = true
             encodeDefaults = true
+            explicitNulls = false
         }
     }
 
@@ -32,9 +35,19 @@ class TodoistClient(private val token: String) {
     private fun sendRequest(
         endpoint: String,
         method: String = "GET",
-        body: String? = null
+        body: String? = null,
+        queryParams: Map<String, String> = emptyMap()
     ): String {
-        val url = URL("$BASE_URL$endpoint")
+        // 构建 Query String
+        val queryString = if (queryParams.isNotEmpty()) {
+            "?" + queryParams.map { (k, v) ->
+                "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v, "UTF-8")}"
+            }.joinToString("&")
+        } else {
+            ""
+        }
+
+        val url = URL("$BASE_URL$endpoint$queryString")
         val connection = url.openConnection() as HttpURLConnection
 
         try {
@@ -69,20 +82,55 @@ class TodoistClient(private val token: String) {
                 throw TodoistException("HTTP Error $responseCode: $response")
             }
 
+            if (response.isEmpty()) return "{}"
+
             return response
         } finally {
             connection.disconnect()
         }
     }
 
+    /**
+     * 自动处理分页逻辑，获取所有资源
+     */
+    private fun <T> fetchAll(
+        endpoint: String,
+        itemSerializer: KSerializer<T>,
+        initialParams: Map<String, String> = emptyMap()
+    ): List<T> {
+        val allResults = mutableListOf<T>()
+        var cursor: String? = null
+
+        do {
+            val params = initialParams.toMutableMap()
+            if (cursor != null) {
+                params["cursor"] = cursor
+            }
+
+            // 发送请求
+            val responseText = sendRequest(endpoint, queryParams = params)
+
+            // 解析分页响应结构
+            val paginatedResponse = json.decodeFromString(
+                PaginatedResponse.serializer(itemSerializer),
+                responseText
+            )
+
+            allResults.addAll(paginatedResponse.results)
+            cursor = paginatedResponse.nextCursor
+
+        } while (cursor != null)
+
+        return allResults
+    }
+
     // ========== 项目管理 (Project Management) ==========
 
     /**
-     * 获取所有项目
+     * 获取所有项目 (自动处理分页)
      */
     fun getProjects(): List<Project> {
-        val response = sendRequest("/projects")
-        return json.decodeFromString(ListSerializer(Project.serializer()), response)
+        return fetchAll("/projects", Project.serializer())
     }
 
     /**
@@ -165,16 +213,14 @@ class TodoistClient(private val token: String) {
     // ========== 板块管理 (Section Management) ==========
 
     /**
-     * 获取项目的所有板块
+     * 获取项目的所有板块 (自动处理分页)
      */
     fun getSections(projectId: String? = null): List<Section> {
-        val endpoint = if (projectId != null) {
-            "/sections?project_id=$projectId"
-        } else {
-            "/sections"
+        val params = mutableMapOf<String, String>()
+        if (projectId != null) {
+            params["project_id"] = projectId
         }
-        val response = sendRequest(endpoint)
-        return json.decodeFromString(ListSerializer(Section.serializer()), response)
+        return fetchAll("/sections", Section.serializer(), params)
     }
 
     /**
@@ -219,26 +265,19 @@ class TodoistClient(private val token: String) {
     // ========== 任务管理 (Task Management) ==========
 
     /**
-     * 获取所有活跃任务
+     * 获取所有活跃任务 (自动处理分页)
      */
     fun getTasks(
         projectId: String? = null,
         sectionId: String? = null,
         label: String? = null
     ): List<Task> {
-        val params = mutableListOf<String>()
-        if (projectId != null) params.add("project_id=$projectId")
-        if (sectionId != null) params.add("section_id=$sectionId")
-        if (label != null) params.add("label=$label")
+        val params = mutableMapOf<String, String>()
+        if (projectId != null) params["project_id"] = projectId
+        if (sectionId != null) params["section_id"] = sectionId
+        if (label != null) params["label"] = label
 
-        val endpoint = if (params.isEmpty()) {
-            "/tasks"
-        } else {
-            "/tasks?" + params.joinToString("&")
-        }
-
-        val response = sendRequest(endpoint)
-        return json.decodeFromString(ListSerializer(Task.serializer()), response)
+        return fetchAll("/tasks", Task.serializer(), params)
     }
 
     /**
@@ -348,14 +387,3 @@ class TodoistClient(private val token: String) {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
