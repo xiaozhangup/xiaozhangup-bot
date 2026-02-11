@@ -7,6 +7,12 @@ abstract class MessageComponent(
     enum class Type {
         STRING,
         IMAGE,
-        AT
+        AT,
+        RICH,
+        CONTAINER
+    }
+
+    open fun asString(): String {
+        return context
     }
 }

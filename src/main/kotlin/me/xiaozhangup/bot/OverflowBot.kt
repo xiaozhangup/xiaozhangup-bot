@@ -7,16 +7,12 @@ import me.xiaozhangup.bot.port.Contact
 import me.xiaozhangup.bot.port.LifeCycle
 import me.xiaozhangup.bot.port.Reaction
 import me.xiaozhangup.bot.port.event.EventBus
-import me.xiaozhangup.bot.port.msg.MessageComponent
-import me.xiaozhangup.bot.port.msg.obj.AtComponent
-import me.xiaozhangup.bot.port.msg.obj.ImageComponent
-import me.xiaozhangup.bot.port.msg.obj.StringComponent
+import me.xiaozhangup.bot.util.asMessage
 import net.mamoe.mirai.Bot
 import net.mamoe.mirai.event.GlobalEventChannel
 import net.mamoe.mirai.event.events.FriendMessageEvent
 import net.mamoe.mirai.event.events.GroupMessageEvent
 import net.mamoe.mirai.message.data.*
-import net.mamoe.mirai.message.data.Image.Key.queryUrl
 import top.mrxiaom.overflow.event.MessageReactionEvent
 import java.io.File
 
@@ -86,36 +82,8 @@ class OverflowBot : LifeCycle {
         return dataFolder
     }
 
-    private suspend fun asMessage(chain: MessageChain): List<MessageComponent> {
-        return chain.mapNotNull { msg ->
-            when(msg) {
-                is Image -> {
-                    ImageComponent(msg.queryUrl())
-                }
-
-                is PlainText -> {
-                    StringComponent(msg.content)
-                }
-
-                is At -> {
-                    AtComponent(msg.target.toString())
-                }
-
-                is AtAll -> {
-                    AtComponent("all")
-                }
-
-                else -> {
-                    val content = msg.content
-                    if (content.isEmpty()) null
-                    else StringComponent(msg.content)
-                }
-            }
-        }
-    }
-
     private fun asReaction(action: String): Reaction {
-        return when(action) {
+        return when (action) {
             "127874" -> Reaction.CAKE
             "66" -> Reaction.HEART
             "76" -> Reaction.LIKE

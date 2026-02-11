@@ -62,7 +62,8 @@ class TaskAbstract : EventUnit(
         if (apiKey.isNullOrBlank()) {
             throw IllegalStateException("AI API key is not set in ai.properties")
         }
-        AIClient("""
+        AIClient(
+            """
             我将向你发送一条QQ消息，该消息通常为学校发布的通知类内容。请你严格按照以下要求执行任务：
             
             ### 核心目标
@@ -122,7 +123,8 @@ class TaskAbstract : EventUnit(
             }
             若某类别无对应信息，对应值严格填充：任务主体为""、附件为[]、相关时间为""。
             若消息本身不是通知类型，则所有字段均填充为空值。
-        """.trimIndent(), apiKey)
+        """.trimIndent(), apiKey
+        )
     }
 
     override fun onGroupMessage(message: Message) {

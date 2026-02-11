@@ -22,7 +22,7 @@ abstract class Message(
     }
 
     open fun getMessage(): String {
-        return component.joinToString("") { it.context }
+        return component.joinToString("") { it.asString() }
     }
 
     open fun getSender(): Source? {

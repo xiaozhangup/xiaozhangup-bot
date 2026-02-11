@@ -4,9 +4,9 @@ import java.io.File
 
 interface LifeCycle {
 
-    fun onEnable() { }
+    fun onEnable() {}
 
-    fun onDisable() { }
+    fun onDisable() {}
 
     fun getContact(): Contact
 

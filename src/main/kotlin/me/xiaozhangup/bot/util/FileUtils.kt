@@ -8,7 +8,9 @@ import java.util.*
 
 fun properties(name: String): Properties {
     val file = File(getDataFolder(), "$name.properties")
-    if (!file.exists()) { file.createNewFile() }
+    if (!file.exists()) {
+        file.createNewFile()
+    }
     return Properties().apply {
         Files.newBufferedReader(
             file.toPath(),

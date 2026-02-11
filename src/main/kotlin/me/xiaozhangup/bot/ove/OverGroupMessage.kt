@@ -5,12 +5,12 @@ import me.xiaozhangup.bot.port.Message
 import me.xiaozhangup.bot.port.Reaction
 import me.xiaozhangup.bot.port.Source
 import me.xiaozhangup.bot.port.msg.MessageComponent
-import me.xiaozhangup.bot.port.msg.obj.AtComponent
-import me.xiaozhangup.bot.port.msg.obj.ImageComponent
-import me.xiaozhangup.bot.port.msg.obj.StringComponent
+import me.xiaozhangup.bot.util.asMessageChain
 import net.mamoe.mirai.contact.Group
 import net.mamoe.mirai.contact.Member
-import net.mamoe.mirai.message.data.*
+import net.mamoe.mirai.message.data.MessageSource
+import net.mamoe.mirai.message.data.PlainText
+import net.mamoe.mirai.message.data.QuoteReply
 import top.mrxiaom.overflow.contact.RemoteGroup.Companion.asRemoteGroup
 
 class OverGroupMessage(
@@ -54,18 +54,7 @@ class OverGroupMessage(
 
     override fun addReply(vararg messages: MessageComponent) {
         group.launch {
-            val message = buildMessageChain {
-                messages.forEach { comp ->
-                    when (comp) {
-                        is StringComponent -> +PlainText(comp.context)
-                        is AtComponent -> comp.context.toLongOrNull()
-                            ?.let { +At(it) }
-                            ?: +AtAll
-                        is ImageComponent -> TODO()
-                        else -> +PlainText(comp.context)
-                    }
-                }
-            }
+            val message = asMessageChain(*messages)
             if (msgSource == null) {
                 group.sendMessage(message)
                 return@launch
