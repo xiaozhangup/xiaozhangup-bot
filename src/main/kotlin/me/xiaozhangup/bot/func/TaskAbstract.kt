@@ -16,6 +16,7 @@ import me.xiaozhangup.bot.util.obj.FixedSizeMap
 import me.xiaozhangup.bot.util.obj.TagMessageStore
 import me.xiaozhangup.bot.util.obj.TextSimilarityStore
 import java.io.File
+import java.net.SocketTimeoutException
 
 
 class TaskAbstract : EventUnit(
@@ -83,8 +84,8 @@ class TaskAbstract : EventUnit(
             - 现在的时间是: ${java.time.LocalDate.now()}
             - 单日时间：YYYY.MM.DD（如2026.02.03）
             - 时间段：YYYY.MM.DD-YYYY.MM.DD（如2026.02.03-2026.03.01）
-            - 仅指定开始日（无结束日）：YYYY.MM.DD+
-            - 仅指定结束日（无开始日）：YYYY.MM.DD-
+            - 仅通知仅指定开始日（无结束日）则在末尾添加加号：YYYY.MM.DD+
+            - 仅通知仅指定结束日（无开始日）则在末尾添加减号：YYYY.MM.DD-
             - 若时间无年份，需根据通知上下文（如当前学年/学期）默认填充对应年份（若无法判断则保留原文时间格式，但需转换为半角句号分割）
             - 若有多个时间信息，均需提取并按上述格式规范化后，以逗号分隔呈现（如有时间段与单日时间混合出现，取时间段为准）
             - 若为相对时间词或者没有提供例如年份/月份等足够的时间信息，必须根据“现在的时间”进行解析，并将其转化为明确的日期或日期范围
@@ -118,7 +119,7 @@ class TaskAbstract : EventUnit(
               "task_title": "提取的任务标题（简短概括任务主体，48字以内）",
               "task_subject": "提取的任务主体纯文本（仅核心动作，无冗余）",
               "attachments": ["类型1: 内容1", "类型2: 内容2"],
-              "related_time": "按规则格式化后的时间字符串；此处不包含时刻信息，仅日期或日期范围",
+              "related_time": "按规则格式化后的时间字符串；此处不包含时刻信息，知能填写严格按规则格式化后的日期或日期范围",
               "earliest_time": "最早的一个时间；若原文包含具体时刻则为 YYYY.MM.DD HH:mm，否则为 YYYY.MM.DD"
             }
             若某类别无对应信息，对应值严格填充：任务主体为""、附件为[]、相关时间为""。
@@ -165,57 +166,71 @@ class TaskAbstract : EventUnit(
                 return@submit
             }
 
-            try {
-                if (!task.taskTitle.isBlank()) {
-                    doistClient.createTask(
-                        content = task.taskTitle,
-                        description = buildString {
-                            if (task.taskSubject.isNotBlank()) {
-                                append(task.taskSubject)
-                            }
-                            if (task.attachments.isNotEmpty()) {
-                                append("\n\n附件: ")
-                                var index = 1
-                                task.attachments.forEach { att ->
-                                    append("\n${index++}. $att")
+            if (!task.taskTitle.isBlank()) {
+                var failed = 0
+                var success = false
+                while (failed < 5) {
+                    try {
+                        doistClient.createTask(
+                            content = task.taskTitle,
+                            description = buildString {
+                                if (task.taskSubject.isNotBlank()) {
+                                    append(task.taskSubject)
                                 }
-                            }
-                            if (task.relatedTime.isNotBlank()) {
-                                append("\n\n时间: ${task.relatedTime}")
-                            }
-                            append("\n\n来自: ${source.name} (${source.id})\n原始消息:\n$raw")
-                        },
-                        sectionId = sectionId,
-                        dueString = task.earliestTime
-                    )
-                    info("[TaskAbstract] Created task '${task.taskTitle}' in Todoist.")
+                                if (task.attachments.isNotEmpty()) {
+                                    append("\n\n附件: ")
+                                    var index = 1
+                                    task.attachments.forEach { att ->
+                                        append("\n${index++}. $att")
+                                    }
+                                }
+                                if (task.relatedTime.isNotBlank()) {
+                                    append("\n\n时间: ${task.relatedTime}")
+                                }
+                                append("\n\n来自: ${source.name} (${source.id})\n原始消息:\n$raw")
+                            },
+                            sectionId = sectionId,
+                            dueString = task.earliestTime
+                        )
 
-                    var index = 1
-                    val msg = buildString {
-                        append(task.taskTitle)
-                        if (task.relatedTime.isNotBlank()) {
-                            append("\n\n时间: \n${task.relatedTime}")
-                        }
-                        if (task.attachments.isNotEmpty()) {
-                            append("\n\n附件: ")
-                            task.attachments.forEach { att ->
-                                append("\n${index++}. $att")
-                            }
-                        }
-                        if (task.taskSubject.isNotBlank()) {
-                            append("\n\n${task.taskSubject}")
-                        }
-                        append("\n\n#任务 #${message.id}")
+                        success = true
+                        info("[TaskAbstract] Created task '${task.taskTitle}' in Todoist.")
+                    } catch (_: SocketTimeoutException) {
+                        failed++
+                        warning("[TaskAbstract] Socket timeout when creating task '${task.taskTitle}', retrying... ($failed/5)")
+                    } catch (e: Exception) {
+                        message.replyOrSend("添加 Todoist 任务时出错: ${e.message}")
+                        warning("[TaskAbstract] Failed to create task '${task.taskTitle}': ${e.message}")
+                        e.printStackTrace()
+                        break
                     }
-                    tagStore.insert(msg)
-                    message.replyOrSend(msg)
-                } else {
-                    message.replyOrSend("该消息未包含任务信息，未创建任务")
                 }
-            } catch (e: Throwable) {
-                message.replyOrSend("添加 Todoist 任务时出错: ${e.message}")
-                e.printStackTrace()
-                return@submit
+
+                var index = 1
+                val msg = buildString {
+                    append(task.taskTitle)
+                    if (task.relatedTime.isNotBlank()) {
+                        append("\n\n时间: \n${task.relatedTime}")
+                    }
+                    if (task.attachments.isNotEmpty()) {
+                        append("\n\n附件: ")
+                        task.attachments.forEach { att ->
+                            append("\n${index++}. $att")
+                        }
+                    }
+                    if (task.taskSubject.isNotBlank()) {
+                        append("\n\n${task.taskSubject}")
+                    }
+                    append("\n")
+                    if (!success) {
+                        append("\n#无法插入Todoist")
+                    }
+                    append("\n#任务 #${message.id}")
+                }
+                tagStore.insert(msg)
+                message.replyOrSend(msg)
+            } else {
+                message.replyOrSend("该消息未包含任务信息，未创建任务")
             }
         }
     }
