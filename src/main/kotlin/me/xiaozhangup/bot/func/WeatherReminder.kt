@@ -1,8 +1,14 @@
 package me.xiaozhangup.bot.func
 
 import me.xiaozhangup.bot.client.ow.OpenWeatherClient
+import me.xiaozhangup.bot.client.peapix.PeapixClient
+import me.xiaozhangup.bot.port.msg.obj.ImageComponent
+import me.xiaozhangup.bot.port.msg.obj.StringComponent
 import me.xiaozhangup.bot.port.unit.EventUnit
 import me.xiaozhangup.bot.util.*
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 class WeatherReminder : EventUnit(
     "weather_reminder",
@@ -17,6 +23,7 @@ class WeatherReminder : EventUnit(
         }
         OpenWeatherClient(apiKey)
     }
+    private val peapixClient by lazy { PeapixClient() }
 
     private val targetGroups by lazy {
         config.getProperty("target.groups")?.split(',')?.map { it.trim() } ?: listOf()
@@ -27,7 +34,7 @@ class WeatherReminder : EventUnit(
     }
 
     init {
-        registerScheduled("weather_reminder_task", 7, 30) { sendWeatherReport() }
+        registerScheduled("weather_reminder", 7, 30) { sendWeatherReport() }
         info("[WeatherReminder] Weather reminder initialized. Target groups: $targetGroups, City: $city")
     }
 
@@ -35,30 +42,54 @@ class WeatherReminder : EventUnit(
         try {
             info("[WeatherReminder] Fetching weather for $city...")
             val weather = weatherClient.getWeather(city)
+            val image = peapixClient.getBingImage("cn", 1).random()
 
             val message = buildString {
-                append("☀️ 早安！今日天气播报\n")
-                append("━━━━━━━━━━━━━━━\n")
-                append("📍 城市: ${weather.name}\n")
-                append("🌡️ 温度: ${weather.main.temp}°C\n")
-                append("🤔 体感: ${weather.main.feelsLike}°C\n")
-                append("📊 温度范围: ${weather.main.temp_min}°C ~ ${weather.main.temp_max}°C\n")
-                append("💧 湿度: ${weather.main.humidity}%\n")
-                append("🌀 气压: ${weather.main.pressure} hPa\n")
-                append("💨 风速: ${weather.wind.speed} m/s\n")
-                if (weather.weather.isNotEmpty()) {
-                    val desc = weather.weather[0]
-                    append("☁️ 天气: ${desc.description}\n")
+                val desc = weather.weather.firstOrNull()?.description ?: ""
+                val temp = weather.main.temp
+                val feelsLike = weather.main.feelsLike
+
+                val advice = when {
+                    desc.contains("雨") -> "有雨，出门请记得带伞"
+                    desc.contains("雪") -> "路面可能湿滑，请注意出行安全"
+                    feelsLike < 10 -> "天气较冷，请注意多穿衣保暖"
+                    feelsLike > 32 -> "天气炎热，请注意防暑降温"
+                    weather.wind.speed > 10 -> "室外风力较大，请注意防风"
+                    else -> "体感舒适，适合活动"
                 }
-                append("━━━━━━━━━━━━━━━\n")
-                append("祝你有美好的一天！")
+
+                append("早上好！现在天气${desc}，气温 ${temp}°C  (体感 ${feelsLike}°C)。")
+
+                weather.visibility?.let { vis ->
+                    val visKm = vis / 1000.0
+                    append("能见度 %.1fkm，".format(visKm))
+                }
+
+                weather.sys?.let { sys ->
+                    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+                    val zoneId = ZoneId.systemDefault()
+
+                    val sunriseTime = Instant.ofEpochSecond(sys.sunrise)
+                        .atZone(zoneId)
+                        .format(timeFormatter)
+                    val sunsetTime = Instant.ofEpochSecond(sys.sunset)
+                        .atZone(zoneId)
+                        .format(timeFormatter)
+
+                    append("日出 ${sunriseTime}，日落 ${sunsetTime}。")
+                }
+
+                append("\n\n今日${advice}，祝你有美好的一天！\n\n")
             }
 
-            // 向所有目标群发送天气信息
             targetGroups.forEach { groupId ->
                 val group = getGroup(groupId)
                 if (group != null) {
-                    group.sendMessage(message)
+                    group.sendMessage(
+                        StringComponent(message),
+                        ImageComponent(image.thumbUrl),
+                        StringComponent("\n—— ${image.title}")
+                    )
                 } else {
                     warning("[WeatherReminder] Group not found: $groupId")
                 }
