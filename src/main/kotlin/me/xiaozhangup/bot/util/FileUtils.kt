@@ -9,7 +9,20 @@ import java.util.*
 fun properties(name: String): Properties {
     val file = File(getDataFolder(), "$name.properties")
     if (!file.exists()) {
-        file.createNewFile()
+        val resourcePath = "$name.properties"
+        val inputStream = PluginMain::class.java.classLoader.getResourceAsStream(resourcePath)
+
+        if (inputStream != null) {
+            inputStream.use { input ->
+                file.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            info("[Properties] Extracted default configuration: $name.properties")
+        } else {
+            file.createNewFile()
+            info("[Properties] Created empty configuration: $name.properties")
+        }
     }
     return Properties().apply {
         Files.newBufferedReader(

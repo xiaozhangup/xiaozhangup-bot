@@ -4,19 +4,20 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import me.xiaozhangup.bot.client.ai.AIClient
+import me.xiaozhangup.bot.client.doist.TodoistClient
 import me.xiaozhangup.bot.port.Group
 import me.xiaozhangup.bot.port.Message
 import me.xiaozhangup.bot.port.Reaction
 import me.xiaozhangup.bot.port.msg.obj.AtComponent
 import me.xiaozhangup.bot.port.unit.EventUnit
 import me.xiaozhangup.bot.util.*
-import me.xiaozhangup.bot.util.ai.AIClient
-import me.xiaozhangup.bot.util.doist.TodoistClient
 import me.xiaozhangup.bot.util.obj.FixedSizeMap
 import me.xiaozhangup.bot.util.obj.TagMessageStore
 import me.xiaozhangup.bot.util.obj.TextSimilarityStore
 import java.io.File
 import java.net.SocketTimeoutException
+import java.time.LocalDate
 
 
 class TaskAbstract : EventUnit(
@@ -81,7 +82,7 @@ class TaskAbstract : EventUnit(
                - **最早时间**：从“相关时间”中筛选出的最早日期，仅包含单一日期（YYYY.MM.DD格式）；若无时间信息，该项为""。
             
             ### 时间格式化规则（强制统一）
-            - 现在的时间是: ${java.time.LocalDate.now()}
+            - 现在的时间是: ${LocalDate.now()}
             - 单日时间：YYYY.MM.DD（如2026.02.03）
             - 时间段：YYYY.MM.DD-YYYY.MM.DD（如2026.02.03-2026.03.01）
             - 仅通知仅指定开始日（无结束日）则在末尾添加加号：YYYY.MM.DD+

@@ -1,4 +1,4 @@
-package me.xiaozhangup.bot.util.ai
+package me.xiaozhangup.bot.client.ai
 
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection

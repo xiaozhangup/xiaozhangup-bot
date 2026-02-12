@@ -1,4 +1,4 @@
-package me.xiaozhangup.bot.util.doist
+package me.xiaozhangup.bot.client.doist
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

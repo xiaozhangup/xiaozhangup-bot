@@ -1,18 +1,19 @@
 package me.xiaozhangup.bot
 
 import me.xiaozhangup.bot.func.TaskAbstract
+import me.xiaozhangup.bot.func.WeatherReminder
 import me.xiaozhangup.bot.ove.OverFriendMessage
 import me.xiaozhangup.bot.ove.OverGroupMessage
 import me.xiaozhangup.bot.port.Contact
 import me.xiaozhangup.bot.port.LifeCycle
 import me.xiaozhangup.bot.port.Reaction
 import me.xiaozhangup.bot.port.event.EventBus
+import me.xiaozhangup.bot.util.ScheduledUtils
 import me.xiaozhangup.bot.util.asMessage
 import net.mamoe.mirai.Bot
 import net.mamoe.mirai.event.GlobalEventChannel
 import net.mamoe.mirai.event.events.FriendMessageEvent
 import net.mamoe.mirai.event.events.GroupMessageEvent
-import net.mamoe.mirai.message.data.*
 import top.mrxiaom.overflow.event.MessageReactionEvent
 import java.io.File
 
@@ -67,10 +68,15 @@ class OverflowBot : LifeCycle {
         }
         logger.info("[EventBus] Event listeners registered.")
 
+        ScheduledUtils.start(40)
+        logger.info("[Scheduler] Scheduler started.")
+
         EventBus.register(TaskAbstract())
+        EventBus.register(WeatherReminder())
     }
 
     override fun onDisable() {
+        ScheduledUtils.stop()
         logger.info("[EventBus] Goodbye!")
     }
 
