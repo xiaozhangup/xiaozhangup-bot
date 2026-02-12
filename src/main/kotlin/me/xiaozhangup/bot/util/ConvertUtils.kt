@@ -28,15 +28,19 @@ suspend fun asMessage(chain: MessageChain): List<MessageComponent> {
             }
 
             is LightApp -> {
-                RichComponent("小程序消息")
+                RichComponent("小程序", "")
             }
 
             is ServiceMessage -> {
-                RichComponent("服务消息: ${msg.serviceId}")
+                RichComponent("服务", msg.serviceId.toString())
             }
 
             is RichMessage -> {
-                RichComponent("富文本消息")
+                RichComponent("富文本", "")
+            }
+
+            is FileMessage -> {
+                RichComponent("文件", msg.name)
             }
 
             is ForwardMessage -> {
@@ -65,15 +69,14 @@ fun asMessageChain(vararg messages: MessageComponent): MessageChain {
     return buildMessageChain {
         messages.forEach { comp ->
             when (comp) {
-                is StringComponent -> +PlainText(comp.context)
+                is StringComponent -> +PlainText(comp.asString())
                 is AtComponent -> comp.context.toLongOrNull()
                     ?.let { +At(it) }
                     ?: +AtAll
-
                 is ImageComponent -> +OverflowAPI.get().imageFromFile(comp.context)
-                is RichComponent -> +PlainText(comp.context)
-                is ContainerComponent -> +PlainText(comp.context)
-                else -> +PlainText(comp.context)
+                is RichComponent -> +PlainText(comp.asString())
+                is ContainerComponent -> +PlainText(comp.asString())
+                else -> +PlainText(comp.asString())
             }
         }
     }
