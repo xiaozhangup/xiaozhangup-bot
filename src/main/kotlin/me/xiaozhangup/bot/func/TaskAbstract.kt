@@ -196,6 +196,7 @@ class TaskAbstract : EventUnit(
 
                         success = true
                         info("[TaskAbstract] Created task '${task.taskTitle}' in Todoist.")
+                        break
                     } catch (_: SocketTimeoutException) {
                         failed++
                         warning("[TaskAbstract] Socket timeout when creating task '${task.taskTitle}', retrying... ($failed/5)")

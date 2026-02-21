@@ -88,7 +88,7 @@ class WeatherReminder : EventUnit(
                     group.sendMessage(
                         StringComponent(message),
                         ImageComponent(image.thumbUrl),
-                        StringComponent("\n—— ${image.title}")
+                        StringComponent("—— ${image.title}")
                     )
                 } else {
                     warning("[WeatherReminder] Group not found: $groupId")
