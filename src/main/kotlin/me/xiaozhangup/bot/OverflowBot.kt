@@ -1,6 +1,7 @@
 package me.xiaozhangup.bot
 
 import me.xiaozhangup.bot.func.CodeForcesContest
+import me.xiaozhangup.bot.func.DoistTask
 import me.xiaozhangup.bot.func.PingPong
 import me.xiaozhangup.bot.func.TaskAbstract
 import me.xiaozhangup.bot.func.WeatherReminder
@@ -77,6 +78,7 @@ class OverflowBot : LifeCycle {
         EventBus.register(WeatherReminder())
         EventBus.register(PingPong())
         EventBus.register(CodeForcesContest())
+        EventBus.register(DoistTask())
     }
 
     override fun onDisable() {

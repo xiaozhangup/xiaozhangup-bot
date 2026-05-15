@@ -19,7 +19,6 @@ import java.io.File
 import java.net.SocketTimeoutException
 import java.time.LocalDate
 
-
 class TaskAbstract : EventUnit(
     "task_abstract",
     "任务摘要工具",
@@ -28,7 +27,7 @@ class TaskAbstract : EventUnit(
     private val history = mutableMapOf<String, FixedSizeMap<Int, Message>>()
     private val config by lazy { properties("task_abstract") }
     private val tagStore by lazy { TagMessageStore(dataFolder("task_abstract")) }
-    private val similarityStore by lazy { TextSimilarityStore(12, File(getDataFolder(), "task_abstract.store")) }
+    private val similarityStore by lazy { TextSimilarityStore(12, File(dataFolder("task_abstract"), "task_abstract.store")) }
     private val doistClient by lazy {
         val token = config.getProperty("doist.token")
         if (token.isNullOrBlank()) {
