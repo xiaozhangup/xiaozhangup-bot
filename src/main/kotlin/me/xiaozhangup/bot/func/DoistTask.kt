@@ -46,12 +46,17 @@ class DoistTask : EventUnit(
 
     private fun handleTaskCommand(message: Message, isGroup: Boolean) {
         val raw = message.getMessage().trim()
-        if (!raw.startsWith("/task")) return
+        val sourceId = message.source.id
+        if (!raw.startsWith("/task")) {
+            if (raw == "/inbox") {
+                message.addReply(listSectionTasks(sourceId, null))
+            }
+            return
+        }
 
         val content = raw.removePrefix("/task").trim()
         val command = content.substringBefore(' ').trim().lowercase()
         val arg = if (content.contains(' ')) content.substringAfter(' ').trim() else ""
-        val sourceId = message.source.id
         submit {
             try {
                 when {
@@ -66,24 +71,20 @@ class DoistTask : EventUnit(
                     command in setOf("tasks", "t") -> {
                         val sectionAlias = arg.toIntOrNull()
                         val sectionId = sectionAlias?.let { sectionAliasStore[sourceId]?.get(it) }
-                        if (sectionAlias == null || sectionId == null) {
-                            message.addReply("参数错误：/task tasks <板块编号>")
-                        } else {
-                            message.addReply(listSectionTasks(sourceId, sectionId))
-                        }
+                        message.addReply(listSectionTasks(sourceId, sectionId))
                     }
 
-                    command in setOf("delete", "d") -> {
+                    command in setOf("close", "c") -> {
                         val taskAlias = arg.toIntOrNull()
                         val taskId = taskAlias?.let { taskAliasStore[sourceId]?.get(it) }
                         if (taskAlias == null || taskId == null) {
-                            message.addReply("参数错误：/task delete <任务编号>")
+                            message.addReply("参数错误：/task close <任务编号>")
                         } else {
-                            val deleted = doistClient.deleteTask(taskId)
-                            if (deleted) {
-                                message.addReply("任务已删除 (编号: $taskAlias)")
+                            val closed = doistClient.closeTask(taskId)
+                            if (closed) {
+                                message.addReply("任务已关闭")
                             } else {
-                                message.addReply("删除失败，任务可能不存在或无权限 (编号: $taskAlias)")
+                                message.addReply("关闭失败，任务可能不存在或无权限")
                             }
                         }
                     }
@@ -149,7 +150,7 @@ class DoistTask : EventUnit(
         taskAliasStore.remove(sourceId)
 
         return buildString {
-            append("所有板块:\n")
+            append("所有板块:\n\n")
             sections.forEachIndexed { index, section ->
                 val projectName = projects[section.projectId]?.name ?: "未知项目"
                 append("${index + 1}. $projectName.${section.name}\n")
@@ -157,12 +158,15 @@ class DoistTask : EventUnit(
         }.trim()
     }
 
-    private fun listSectionTasks(sourceId: String, sectionId: String): String {
-        val section = doistClient.getSection(sectionId)
-        val tasks = doistClient.getTasks(sectionId = sectionId)
+    private fun listSectionTasks(sourceId: String, sectionId: String?): String {
+        val section = sectionId?.let { doistClient.getSection(it) }
+        val tasks = doistClient.getTasks(sectionId = sectionId).filter {
+            it.sectionId == sectionId
+        }
+        val name = section?.name ?: "收件箱"
         if (tasks.isEmpty()) {
             taskAliasStore[sourceId] = emptyMap()
-            return "\"${section.name}\" 中的内容:\n\n空板块"
+            return "\"$name\" 中的内容:\n\n空板块"
         }
 
         val maxShow = 16
@@ -171,7 +175,7 @@ class DoistTask : EventUnit(
             index + 1 to task.id
         }.toMap()
         return buildString {
-            append("\"${section.name}\" 中的内容:\n\n")
+            append("\"$name\" 中的内容:\n\n")
             shown.forEachIndexed { index, task ->
                 val due = task.due?.string ?: task.due?.date
                 append("${index + 1}. ${task.content}")
@@ -190,18 +194,15 @@ class DoistTask : EventUnit(
         return """
             1) /task <任务内容>
                功能: 快速添加任务
-            
-            2) /task add <任务内容>
-               功能: 添加任务
              
-            3) /task sections
+            2) /task sections
                功能: 列出所有板块
              
-            4) /task tasks <板块编号>
-               功能: 列出某个板块的任务清单
+            3) /task tasks <板块编号>
+               功能: 列出某板块的任务清单
              
-            5) /task delete <任务编号>
-               功能: 删除指定任务
+            4) /task close <任务编号>
+               功能: 关闭指定任务
         """.trimIndent()
     }
 }
