@@ -11,8 +11,8 @@
 | 命令 | 功能 | 用法 |
 | --- | --- | --- |
 | `/task <任务内容>` | 快速添加任务（兼容旧用法） | `/task 完成周报` |
-| `/task add <任务内容>` | 添加任务 | `/task add 复习离散数学` |
-| `/task sections` | 列出所有板块（含板块ID） | `/task sections` |
-| `/task tasks <板块ID>` | 列出某个板块的任务清单 | `/task tasks 1234567890` |
-| `/task delete <任务ID>` | 删除指定任务 | `/task delete 9876543210` |
-| `/task help` | 列出所有命令、功能与用法 | `/task help` |
+| `/task add <任务内容>` / `/task a <任务内容>` | 添加任务 | `/task a 复习离散数学` |
+| `/task sections` / `/task s` | 列出所有板块（机器人维护板块编号 1,2,3...） | `/task s` |
+| `/task tasks <板块编号>` / `/task t <板块编号>` | 列出某个板块的任务清单（机器人维护任务编号 1,2,3...） | `/task t 1` |
+| `/task delete <任务编号>` / `/task d <任务编号>` | 删除指定任务 | `/task d 2` |
+| `/task help` / `/task h` | 列出所有命令、功能与用法 | `/task h` |
