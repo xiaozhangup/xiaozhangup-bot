@@ -67,9 +67,9 @@ class DoistTask : EventUnit(
                         val sectionAlias = arg.toIntOrNull()
                         val sectionId = sectionAlias?.let { sectionAliasStore[sourceId]?.get(it) }
                         if (sectionAlias == null || sectionId == null) {
-                            message.addReply("用法错误：/task tasks <板块编号>（先用 /task sections 获取编号）")
+                            message.addReply("参数错误：/task tasks <板块编号>")
                         } else {
-                            message.addReply(listSectionTasks(sourceId, sectionAlias, sectionId))
+                            message.addReply(listSectionTasks(sourceId, sectionId))
                         }
                     }
 
@@ -77,13 +77,13 @@ class DoistTask : EventUnit(
                         val taskAlias = arg.toIntOrNull()
                         val taskId = taskAlias?.let { taskAliasStore[sourceId]?.get(it) }
                         if (taskAlias == null || taskId == null) {
-                            message.addReply("用法错误：/task delete <任务编号>（先用 /task tasks <板块编号> 获取编号）")
+                            message.addReply("参数错误：/task delete <任务编号>")
                         } else {
                             val deleted = doistClient.deleteTask(taskId)
                             if (deleted) {
-                                message.addReply("任务已删除（编号: $taskAlias）")
+                                message.addReply("任务已删除 (编号: $taskAlias)")
                             } else {
-                                message.addReply("删除失败，任务可能不存在或无权限（编号: $taskAlias）")
+                                message.addReply("删除失败，任务可能不存在或无权限 (编号: $taskAlias)")
                             }
                         }
                     }
@@ -149,73 +149,59 @@ class DoistTask : EventUnit(
         taskAliasStore.remove(sourceId)
 
         return buildString {
-            append("所有板块（共 ${sections.size} 个）:\n")
+            append("所有板块:\n")
             sections.forEachIndexed { index, section ->
                 val projectName = projects[section.projectId]?.name ?: "未知项目"
                 append("${index + 1}. $projectName.${section.name}\n")
-                append("   板块编号: ${index + 1}\n")
             }
-            append("\n使用 /task tasks <板块编号>（或 /task t <板块编号>）查看该板块任务")
         }.trim()
     }
 
-    private fun listSectionTasks(sourceId: String, sectionAlias: Int, sectionId: String): String {
+    private fun listSectionTasks(sourceId: String, sectionId: String): String {
         val section = doistClient.getSection(sectionId)
         val tasks = doistClient.getTasks(sectionId = sectionId)
         if (tasks.isEmpty()) {
             taskAliasStore[sourceId] = emptyMap()
-            return "板块「${section.name}」（编号: $sectionAlias）当前没有任务"
+            return "\"${section.name}\" 中的内容:\n\n空板块"
         }
 
-        val maxShow = 30
+        val maxShow = 16
         val shown = tasks.take(maxShow)
         taskAliasStore[sourceId] = shown.mapIndexed { index, task ->
             index + 1 to task.id
         }.toMap()
         return buildString {
-            append("板块「${section.name}」（编号: $sectionAlias）任务清单（共 ${tasks.size} 个）:\n")
+            append("\"${section.name}\" 中的内容:\n\n")
             shown.forEachIndexed { index, task ->
                 val due = task.due?.string ?: task.due?.date
-                append("${index + 1}. ${task.content}\n")
-                append("   任务编号: ${index + 1}")
+                append("${index + 1}. ${task.content}")
                 if (!due.isNullOrBlank()) {
-                    append(" | 截止: $due")
+                    append(" (截止: $due)")
                 }
                 append('\n')
             }
             if (tasks.size > maxShow) {
-                append("\n仅展示前 $maxShow 个任务")
+                append("\n剩余 ${tasks.size - maxShow} 个任务")
             }
-            append("\n使用 /task delete <任务编号>（或 /task d <任务编号>）删除任务")
         }.trim()
     }
 
     private fun helpMessage(): String {
         return """
-            Doist 命令帮助
-            
             1) /task <任务内容>
-               功能: 快速添加任务（兼容旧用法）
+               功能: 快速添加任务
             
             2) /task add <任务内容>
                功能: 添加任务
-               缩写: /task a <任务内容>
              
             3) /task sections
-               功能: 列出所有板块（自动分配板块编号）
-               缩写: /task s
+               功能: 列出所有板块
              
             4) /task tasks <板块编号>
-               功能: 列出某个板块的任务清单（自动分配任务编号）
-               缩写: /task t <板块编号>
+               功能: 列出某个板块的任务清单
              
             5) /task delete <任务编号>
                功能: 删除指定任务
-               缩写: /task d <任务编号>
-             
-            6) /task help
-               功能: 显示本帮助
-               缩写: /task h
         """.trimIndent()
     }
 }
