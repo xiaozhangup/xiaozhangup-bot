@@ -60,6 +60,8 @@ class TaskAbstract : EventUnit(
     }
     private val aiClient by lazy {
         val apiKey = config.getProperty("api.key")
+        val apiModel = config.getProperty("api.model")
+        val apiBaseUrl = config.getProperty("api.url")
         if (apiKey.isNullOrBlank()) {
             throw IllegalStateException("AI API key is not set in ai.properties")
         }
@@ -124,7 +126,7 @@ class TaskAbstract : EventUnit(
             }
             若某类别无对应信息，对应值严格填充：任务主体为""、附件为[]、相关时间为""。
             若消息本身不是通知类型，则所有字段均填充为空值。
-        """.trimIndent(), apiKey
+        """.trimIndent(), apiKey, apiBaseUrl, apiModel
         )
     }
 
