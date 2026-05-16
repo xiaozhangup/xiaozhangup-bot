@@ -6,6 +6,7 @@ import me.xiaozhangup.bot.port.Reaction
 import me.xiaozhangup.bot.port.Source
 import me.xiaozhangup.bot.port.unit.EventUnit
 import me.xiaozhangup.bot.util.properties
+import me.xiaozhangup.bot.util.submit
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -32,40 +33,90 @@ class DoistTask : EventUnit(
 
     override fun onGroupMessage(message: Message) {
         if (message.source.id !in targetGroups) return
-        val text = message.getMessage().trim().split(' ', limit = 2)
-        if (text.getOrNull(0) != "/task") return
-        if (text.size != 2) {
-            message.addReaction(Reaction.QUESTION)
-            return
-        }
-
-        try {
-            addTask(text[1], message.getSender())
-            message.addReaction(Reaction.SPARK)
-        } catch (e: Exception) {
-            message.addReply("添加任务失败: ${e.message ?: "未知错误"}")
-            message.addReaction(Reaction.QUESTION)
-        }
+        handleTaskCommand(message, isGroup = true)
     }
 
     override fun onFriendMessage(message: Message) {
         if (message.source.id !in targetUsers) return
-        val text = message.getMessage().trim().split(' ', limit = 2)
-        if (text.getOrNull(0) != "/task") return
-        if (text.size != 2) {
-            message.addReply("请提供任务内容")
-            return
-        }
+        handleTaskCommand(message, isGroup = false)
+    }
 
-        try {
-            addTask(text[1], message.getSender())
-            message.addReply("任务已添加!")
-        } catch (e: Exception) {
-            message.addReply("添加任务失败: ${e.message ?: "未知错误"}")
+    private fun handleTaskCommand(message: Message, isGroup: Boolean) {
+        val raw = message.getMessage().trim()
+        if (!raw.startsWith("/task")) return
+
+        val content = raw.removePrefix("/task").trim()
+        submit {
+            try {
+                when {
+                    content.isBlank() || content.equals("help", ignoreCase = true) || content == "?" -> {
+                        message.addReply(helpMessage())
+                    }
+
+                    content.equals("sections", ignoreCase = true) -> {
+                        message.addReply(listSections())
+                    }
+
+                    content.startsWith("tasks ", ignoreCase = true) -> {
+                        val sectionId = content.substringAfter(' ').trim()
+                        if (sectionId.isBlank()) {
+                            message.addReply("用法错误：/task tasks <板块ID>")
+                        } else {
+                            message.addReply(listSectionTasks(sectionId))
+                        }
+                    }
+
+                    content.startsWith("delete ", ignoreCase = true) -> {
+                        val taskId = content.substringAfter(' ').trim()
+                        if (taskId.isBlank()) {
+                            message.addReply("用法错误：/task delete <任务ID>")
+                        } else {
+                            val deleted = doistClient.deleteTask(taskId)
+                            if (deleted) {
+                                message.addReply("任务已删除: $taskId")
+                            } else {
+                                message.addReply("删除失败，任务可能不存在或无权限: $taskId")
+                            }
+                        }
+                    }
+
+                    content.startsWith("add ", ignoreCase = true) -> {
+                        addTask(content.substringAfter(' ').trim(), message.getSender())
+                        if (isGroup) {
+                            message.addReaction(Reaction.SPARK)
+                        } else {
+                            message.addReply("任务已添加!")
+                        }
+                    }
+
+                    else -> {
+                        addTask(content, message.getSender())
+                        if (isGroup) {
+                            message.addReaction(Reaction.SPARK)
+                        } else {
+                            message.addReply("任务已添加!")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                val msg = when {
+                    content.startsWith("sections", ignoreCase = true) -> "列出板块失败"
+                    content.startsWith("tasks ", ignoreCase = true) -> "获取板块任务失败"
+                    content.startsWith("delete ", ignoreCase = true) -> "删除任务失败"
+                    else -> "添加任务失败"
+                }
+                message.addReply("$msg: ${e.message ?: "未知错误"}")
+                if (isGroup) {
+                    message.addReaction(Reaction.QUESTION)
+                }
+            }
         }
     }
 
     private fun addTask(string: String, source: Source?) {
+        if (string.isBlank()) {
+            throw IllegalArgumentException("请提供任务内容")
+        }
         val chunk = string.split("\n", limit = 2)
         val time = "${LocalDate.now()} ${LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))}"
         doistClient.createTask(
@@ -78,5 +129,70 @@ class DoistTask : EventUnit(
             dueString = "today",
             dueLang = "en"
         )
+    }
+
+    private fun listSections(): String {
+        val projects = doistClient.getProjects().associateBy { it.id }
+        val sections = doistClient.getSections()
+        if (sections.isEmpty()) return "当前没有板块"
+
+        return buildString {
+            append("所有板块（共 ${sections.size} 个）:\n")
+            sections.forEachIndexed { index, section ->
+                val projectName = projects[section.projectId]?.name ?: "未知项目"
+                append("${index + 1}. $projectName.${section.name}\n")
+                append("   板块ID: ${section.id}\n")
+            }
+            append("\n使用 /task tasks <板块ID> 查看该板块任务")
+        }.trim()
+    }
+
+    private fun listSectionTasks(sectionId: String): String {
+        val section = doistClient.getSection(sectionId)
+        val tasks = doistClient.getTasks(sectionId = sectionId)
+        if (tasks.isEmpty()) return "板块「${section.name}」当前没有任务"
+
+        val maxShow = 30
+        val shown = tasks.take(maxShow)
+        return buildString {
+            append("板块「${section.name}」任务清单（共 ${tasks.size} 个）:\n")
+            shown.forEachIndexed { index, task ->
+                val due = task.due?.string ?: task.due?.date
+                append("${index + 1}. ${task.content}\n")
+                append("   任务ID: ${task.id}")
+                if (!due.isNullOrBlank()) {
+                    append(" | 截止: $due")
+                }
+                append('\n')
+            }
+            if (tasks.size > maxShow) {
+                append("\n仅展示前 $maxShow 个任务")
+            }
+            append("\n使用 /task delete <任务ID> 删除任务")
+        }.trim()
+    }
+
+    private fun helpMessage(): String {
+        return """
+            Doist 命令帮助
+            
+            1) /task <任务内容>
+               功能: 快速添加任务（兼容旧用法）
+            
+            2) /task add <任务内容>
+               功能: 添加任务
+            
+            3) /task sections
+               功能: 列出所有板块（含板块ID）
+            
+            4) /task tasks <板块ID>
+               功能: 列出某个板块的任务清单
+            
+            5) /task delete <任务ID>
+               功能: 删除指定任务
+            
+            6) /task help
+               功能: 显示本帮助
+        """.trimIndent()
     }
 }
