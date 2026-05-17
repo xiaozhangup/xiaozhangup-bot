@@ -18,6 +18,8 @@ import me.xiaozhangup.bot.util.obj.TextSimilarityStore
 import java.io.File
 import java.net.SocketTimeoutException
 import java.time.LocalDate
+import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 class TaskAbstract : EventUnit(
     "task_abstract",
@@ -25,6 +27,8 @@ class TaskAbstract : EventUnit(
     1
 ) {
     private val history = mutableMapOf<String, FixedSizeMap<Int, Message>>()
+    private val messageBufferBySource = mutableMapOf<String, ArrayDeque<BufferedMessage>>()
+    private val processedTriggers = FixedSizeMap<String, Long>(256)
     private val config by lazy { properties("task_abstract") }
     private val tagStore by lazy { TagMessageStore(dataFolder("task_abstract")) }
     private val similarityStore by lazy { TextSimilarityStore(12, File(dataFolder("task_abstract"), "task_abstract.store")) }
@@ -116,16 +120,11 @@ class TaskAbstract : EventUnit(
               - earliest_time 应选择**时间上最早且精度最高的那一项**。
             
             ### 输出格式要求（严格合规）
-            输出必须为**标准JSON格式**（无语法错误，键名/引号/逗号完全符合JSON规范），键名固定为英文：
-            {
-              "task_title": "提取的任务标题（简短概括任务主体，48字以内）",
-              "task_subject": "提取的任务主体纯文本（仅核心动作，无冗余）",
-              "attachments": ["类型1: 内容1", "类型2: 内容2"],
-              "related_time": "按规则格式化后的时间字符串；此处不包含时刻信息，知能填写严格按规则格式化后的日期或日期范围",
-              "earliest_time": "最早的一个时间；若原文包含具体时刻则为 YYYY.MM.DD HH:mm，否则为 YYYY.MM.DD"
-            }
-            若某类别无对应信息，对应值严格填充：任务主体为""、附件为[]、相关时间为""。
-            若消息本身不是通知类型，则所有字段均填充为空值。
+            允许输出 0~N 行，每行必须是一个完整标准JSON对象（无语法错误，键名/引号/逗号完全符合JSON规范），键名固定为英文：
+            {"task_title":"提取的任务标题（简短概括任务主体，48字以内）","task_subject":"提取的任务主体纯文本（仅核心动作，无冗余）","attachments":["类型1: 内容1","类型2: 内容2"],"related_time":"按规则格式化后的时间字符串；此处不包含时刻信息，只能填写严格按规则格式化后的日期或日期范围","earliest_time":"最早的一个时间；若原文包含具体时刻则为 YYYY.MM.DD HH:mm，否则为 YYYY.MM.DD"}
+            - 每行只允许一个JSON对象，不允许输出数组，不允许输出解释文字、标题、序号、代码块。
+            - 若某类别无对应信息，对应值严格填充：任务主体为""、附件为[]、相关时间为""。
+            - 若消息本身不是通知类型，直接输出0行（即不输出任何内容）。
         """.trimIndent(), apiKey, apiBaseUrl, apiModel
         )
     }
@@ -133,12 +132,13 @@ class TaskAbstract : EventUnit(
     override fun onGroupMessage(message: Message) {
         if (!snifferGroups.contains(message.source.id)) return
         history.getOrPut(message.source.id) { FixedSizeMap(32) }[message.id] = message
-        val raw = message.getMessage()
+        val buffered = bufferMessage(message)
+        val raw = buffered.rawText
         if (raw.contains("@全体成员") || message.component.any {
                 it is AtComponent && it.context == "all"
             } || snifferWords.any { raw.contains(it) }
         ) {
-            abstractTask(message)
+            scheduleAbstractTask(message, buffered)
         }
     }
 
@@ -147,94 +147,94 @@ class TaskAbstract : EventUnit(
         if (message.source.id != notificationGroup.id) return
         val msg = history[message.source.id]?.get(message.id) ?: return
         if (reaction == Reaction.BUTTON) {
-            abstractTask(msg)
+            val buffered = findBufferedMessage(msg.source.id, msg.id) ?: bufferMessage(msg)
+            scheduleAbstractTask(msg, buffered)
         }
     }
 
-    private fun abstractTask(message: Message) {
+    private fun scheduleAbstractTask(message: Message, trigger: BufferedMessage) {
+        val triggerKey = "${message.source.id}:${message.id}"
+        synchronized(processedTriggers) {
+            if (processedTriggers.containsKey(triggerKey)) return
+            processedTriggers[triggerKey] = System.currentTimeMillis()
+        }
         val source = message.source
-        val raw = message.getMessage()
         if (source is Group && source.id == notificationGroup.id) {
             message.addReaction(Reaction.SPARK)
         }
+        submitDelay(1, TimeUnit.MINUTES) {
+            abstractTask(message, trigger)
+        }
+    }
+
+    private fun abstractTask(message: Message, trigger: BufferedMessage) {
+        val source = message.source
+        val contextMessages = selectContextMessages(trigger)
+        val raw = buildContextPayload(contextMessages)
+
         if (similarityStore.insert(raw) > 0.8) {
             message.replyOrSend("与历史消息高度相似，已忽略")
             return
         }
+
         submit {
-            val task = fetchResult(raw)
-            if (task == null) {
-                message.replyOrSend("无法解析该消息内容，未能提取到有效任务信息")
+            val tasks = fetchResults(raw)
+                .filter { it.taskTitle.isNotBlank() }
+
+            if (tasks.isEmpty()) {
+                message.replyOrSend("该消息未包含任务信息，未创建任务")
                 return@submit
             }
 
-            if (!task.taskTitle.isBlank()) {
-                var failed = 0
-                var success = false
-                while (failed < 5) {
-                    try {
-                        doistClient.createTask(
-                            content = task.taskTitle,
-                            description = buildString {
-                                if (task.taskSubject.isNotBlank()) {
-                                    append(task.taskSubject)
-                                }
-                                if (task.attachments.isNotEmpty()) {
-                                    append("\n\n附件: ")
-                                    var index = 1
-                                    task.attachments.forEach { att ->
-                                        append("\n${index++}. $att")
-                                    }
-                                }
-                                if (task.relatedTime.isNotBlank()) {
-                                    append("\n\n时间: ${task.relatedTime}")
-                                }
-                                append("\n\n来自: ${source.name} (${source.id})\n原始消息:\n$raw")
-                            },
-                            sectionId = sectionId,
-                            dueString = task.earliestTime
-                        )
+            var successCount = 0
+            var duplicateCount = 0
+            val failedReasons = mutableListOf<String>()
+            val successTitles = mutableListOf<String>()
 
-                        success = true
-                        info("[TaskAbstract] Created task '${task.taskTitle}' in Todoist.")
-                        break
-                    } catch (_: SocketTimeoutException) {
-                        failed++
-                        warning("[TaskAbstract] Socket timeout when creating task '${task.taskTitle}', retrying... ($failed/5)")
-                    } catch (e: Exception) {
-                        message.replyOrSend("添加 Todoist 任务时出错: ${e.message}")
-                        warning("[TaskAbstract] Failed to create task '${task.taskTitle}': ${e.message}")
-                        e.printStackTrace()
-                        break
-                    }
+            tasks.forEach { task ->
+                val fingerprint = "${task.taskTitle}\n${task.taskSubject}"
+                if (similarityStore.insert(fingerprint) > 0.92) {
+                    duplicateCount++
+                    return@forEach
                 }
-
-                var index = 1
-                val msg = buildString {
-                    append(task.taskTitle)
-                    if (task.relatedTime.isNotBlank()) {
-                        append("\n\n时间: \n${task.relatedTime}")
-                    }
-                    if (task.attachments.isNotEmpty()) {
-                        append("\n\n附件: ")
-                        task.attachments.forEach { att ->
-                            append("\n${index++}. $att")
-                        }
-                    }
-                    if (task.taskSubject.isNotBlank()) {
-                        append("\n\n${task.taskSubject}")
-                    }
-                    append("\n")
-                    if (!success) {
-                        append("\n#无法插入Todoist")
-                    }
-                    append("\n#任务 #${message.id}")
+                val result = createTodoistTask(task, source, raw)
+                if (result.first) {
+                    successCount++
+                    successTitles += task.taskTitle
+                    tagStore.insert(
+                        buildTaskTagMessage(task, true, message.id)
+                    )
+                } else {
+                    val reason = result.second ?: "未知错误"
+                    failedReasons += "${task.taskTitle}: $reason"
+                    tagStore.insert(
+                        buildTaskTagMessage(task, false, message.id)
+                    )
                 }
-                tagStore.insert(msg)
-                message.replyOrSend(msg)
-            } else {
-                message.replyOrSend("该消息未包含任务信息，未创建任务")
             }
+
+            val total = tasks.size
+            val failedCount = total - successCount - duplicateCount
+            val reply = buildString {
+                append("解析任务: $total 条")
+                append("\n成功创建: $successCount 条")
+                append("\n重复忽略: $duplicateCount 条")
+                append("\n创建失败: $failedCount 条")
+                if (successTitles.isNotEmpty()) {
+                    append("\n\n已创建任务:")
+                    successTitles.forEachIndexed { index, title ->
+                        append("\n${index + 1}. $title")
+                    }
+                }
+                if (failedReasons.isNotEmpty()) {
+                    append("\n\n失败原因:")
+                    failedReasons.forEachIndexed { index, reason ->
+                        append("\n${index + 1}. $reason")
+                    }
+                }
+                append("\n\n#任务 #${message.id}")
+            }
+            message.replyOrSend(reply)
         }
     }
 
@@ -248,25 +248,202 @@ class TaskAbstract : EventUnit(
         }
     }
 
-    private fun fetchResult(msg: String): TaskResult? {
+    private fun fetchResults(msg: String): List<TaskResult> {
         repeat(3) {
             try {
                 val result = aiClient.ask(msg)
-
-                val start = result.indexOfFirst { it == '{' }
-                val end = result.indexOfLast { it == '}' }
-                if (start == -1 || end == -1 || end <= start) {
-                    return@repeat
+                val parsed = parseResultLines(result)
+                if (parsed.isNotEmpty()) {
+                    return parsed
                 }
-
-                val json = result.substring(start, end + 1)
-                return Json.decodeFromString<TaskResult>(json)
+                if (result.trim().isBlank()) {
+                    return emptyList()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 warning("[TaskAbstract] AI response: \n$msg")
             }
         }
-        return null
+        return emptyList()
+    }
+
+    private fun parseResultLines(result: String): List<TaskResult> {
+        val cleaned = result.lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("```") }
+
+        val parsed = mutableListOf<TaskResult>()
+        cleaned.forEach { line ->
+            parseSingleLineTask(line)?.let { parsed += it }
+        }
+        if (parsed.isNotEmpty()) {
+            return parsed
+        }
+
+        val merged = cleaned.joinToString("\n")
+        val start = merged.indexOfFirst { it == '{' }
+        val end = merged.indexOfLast { it == '}' }
+        if (start == -1 || end == -1 || end <= start) {
+            return emptyList()
+        }
+        val one = runCatching {
+            Json.decodeFromString<TaskResult>(merged.substring(start, end + 1))
+        }.getOrNull()
+        return if (one == null) emptyList() else listOf(one)
+    }
+
+    private fun parseSingleLineTask(line: String): TaskResult? {
+        val direct = runCatching {
+            Json.decodeFromString<TaskResult>(line)
+        }.getOrNull()
+        if (direct != null) return direct
+
+        val start = line.indexOfFirst { it == '{' }
+        val end = line.indexOfLast { it == '}' }
+        if (start == -1 || end == -1 || end <= start) {
+            return null
+        }
+        return runCatching {
+            Json.decodeFromString<TaskResult>(line.substring(start, end + 1))
+        }.getOrNull()
+    }
+
+    private fun createTodoistTask(task: TaskResult, source: me.xiaozhangup.bot.port.Source, raw: String): Pair<Boolean, String?> {
+        var failed = 0
+        while (failed < 5) {
+            try {
+                doistClient.createTask(
+                    content = task.taskTitle,
+                    description = buildString {
+                        if (task.taskSubject.isNotBlank()) {
+                            append(task.taskSubject)
+                        }
+                        if (task.attachments.isNotEmpty()) {
+                            append("\n\n附件: ")
+                            var index = 1
+                            task.attachments.forEach { att ->
+                                append("\n${index++}. $att")
+                            }
+                        }
+                        if (task.relatedTime.isNotBlank()) {
+                            append("\n\n时间: ${task.relatedTime}")
+                        }
+                        append("\n\n来自: ${source.name} (${source.id})\n原始消息:\n$raw")
+                    },
+                    sectionId = sectionId,
+                    dueString = task.earliestTime
+                )
+                info("[TaskAbstract] Created task '${task.taskTitle}' in Todoist.")
+                return true to null
+            } catch (_: SocketTimeoutException) {
+                failed++
+                warning("[TaskAbstract] Socket timeout when creating task '${task.taskTitle}', retrying... ($failed/5)")
+            } catch (e: Exception) {
+                warning("[TaskAbstract] Failed to create task '${task.taskTitle}': ${e.message}")
+                e.printStackTrace()
+                return false to (e.message ?: "未知错误")
+            }
+        }
+        return false to "网络超时重试5次失败"
+    }
+
+    private fun buildTaskTagMessage(task: TaskResult, success: Boolean, messageId: Int): String {
+        var index = 1
+        return buildString {
+            append(task.taskTitle)
+            if (task.relatedTime.isNotBlank()) {
+                append("\n\n时间: \n${task.relatedTime}")
+            }
+            if (task.attachments.isNotEmpty()) {
+                append("\n\n附件: ")
+                task.attachments.forEach { att ->
+                    append("\n${index++}. $att")
+                }
+            }
+            if (task.taskSubject.isNotBlank()) {
+                append("\n\n${task.taskSubject}")
+            }
+            append("\n")
+            if (!success) {
+                append("\n#无法插入Todoist")
+            }
+            append("\n#任务 #$messageId")
+        }
+    }
+
+    @Synchronized
+    private fun bufferMessage(message: Message): BufferedMessage {
+        val now = System.currentTimeMillis()
+        val buffered = BufferedMessage(
+            messageId = message.id,
+            senderId = message.getSender()?.id,
+            timestamp = now,
+            rawText = message.getMessage(),
+            sourceId = message.source.id
+        )
+        val queue = messageBufferBySource.getOrPut(message.source.id) { ArrayDeque() }
+        queue.addLast(buffered)
+        cleanupBuffer(queue, now)
+        while (queue.size > 128) {
+            queue.removeFirst()
+        }
+        return buffered
+    }
+
+    @Synchronized
+    private fun findBufferedMessage(sourceId: String, messageId: Int): BufferedMessage? {
+        val queue = messageBufferBySource[sourceId] ?: return null
+        cleanupBuffer(queue, System.currentTimeMillis())
+        return queue.firstOrNull { it.messageId == messageId }
+    }
+
+    @Synchronized
+    private fun selectContextMessages(trigger: BufferedMessage): List<BufferedMessage> {
+        if (trigger.senderId.isNullOrBlank()) {
+            return listOf(trigger)
+        }
+        val queue = messageBufferBySource[trigger.sourceId] ?: return listOf(trigger)
+        cleanupBuffer(queue, System.currentTimeMillis())
+
+        val min = trigger.timestamp - TimeUnit.MINUTES.toMillis(1)
+        val max = trigger.timestamp + TimeUnit.MINUTES.toMillis(1)
+        val candidates = queue
+            .filter {
+                it.senderId == trigger.senderId &&
+                    it.timestamp in min..max
+            }
+            .sortedWith(
+                compareBy<BufferedMessage>(
+                    { abs(it.timestamp - trigger.timestamp) },
+                    { it.timestamp }
+                )
+            )
+
+        val selected = linkedMapOf<Int, BufferedMessage>()
+        selected[trigger.messageId] = trigger
+        candidates.forEach {
+            if (selected.size >= 5) return@forEach
+            selected.putIfAbsent(it.messageId, it)
+        }
+        return selected.values.sortedBy { it.timestamp }
+    }
+
+    private fun buildContextPayload(messages: List<BufferedMessage>): String {
+        if (messages.isEmpty()) return ""
+        return buildString {
+            append("以下是同一会话、同一发送者在触发点前后1分钟内的联合上下文消息（按时间正序，最多5条）：\n")
+            messages.forEachIndexed { index, msg ->
+                append("\n[消息${index + 1}] ")
+                append(msg.rawText)
+            }
+        }
+    }
+
+    private fun cleanupBuffer(queue: ArrayDeque<BufferedMessage>, now: Long) {
+        val ttl = now - TimeUnit.MINUTES.toMillis(3)
+        while (queue.isNotEmpty() && queue.first().timestamp < ttl) {
+            queue.removeFirst()
+        }
     }
 
     @Serializable
@@ -280,5 +457,13 @@ class TaskAbstract : EventUnit(
         val relatedTime: String,
         @SerialName("earliest_time")
         val earliestTime: String
+    )
+
+    data class BufferedMessage(
+        val messageId: Int,
+        val senderId: String?,
+        val timestamp: Long,
+        val rawText: String,
+        val sourceId: String
     )
 }
