@@ -76,12 +76,53 @@ class TagMessageStore(dir: File) {
 
         indexRaf.seek(0)
         while (indexRaf.filePointer < indexRaf.length()) {
+            val remaining = indexRaf.length() - indexRaf.filePointer
+            if (remaining < 4L + 8L) {
+                rebuildIndexFromData()
+                return
+            }
+
             val tagLen = indexRaf.readInt()
+            val bytesRemaining = indexRaf.length() - indexRaf.filePointer
+            if (tagLen <= 0 || tagLen.toLong() > bytesRemaining - 8L) {
+                rebuildIndexFromData()
+                return
+            }
+
             val tagBytes = ByteArray(tagLen)
             indexRaf.readFully(tagBytes)
             val tag = String(tagBytes, StandardCharsets.UTF_8)
             val offset = indexRaf.readLong()
             index.computeIfAbsent(tag) { mutableListOf() }.add(offset)
+        }
+    }
+
+    private fun rebuildIndexFromData() {
+        index.clear()
+        indexRaf.setLength(0)
+
+        if (!dataFile.exists()) return
+
+        dataRaf.seek(0)
+        while (dataRaf.filePointer < dataRaf.length()) {
+            val remaining = dataRaf.length() - dataRaf.filePointer
+            if (remaining < 4L) break
+
+            val len = dataRaf.readInt()
+            val bytesRemaining = dataRaf.length() - dataRaf.filePointer
+            if (len <= 0 || len.toLong() > bytesRemaining) break
+
+            val bytes = ByteArray(len)
+            dataRaf.readFully(bytes)
+            val text = String(bytes, StandardCharsets.UTF_8)
+            val tags = extractTags(text)
+            if (tags.isEmpty()) continue
+
+            val offset = dataRaf.filePointer - (4L + len.toLong())
+            for (tag in tags) {
+                index.computeIfAbsent(tag) { mutableListOf() }.add(offset)
+                writeIndexRecord(tag, offset)
+            }
         }
     }
 }
