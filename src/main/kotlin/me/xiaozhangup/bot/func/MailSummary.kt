@@ -42,7 +42,8 @@ class MailSummary : EventUnit(
     data class MailboxSummary(
         val label: String,
         val summaries: List<String>,
-        val filteredSpamCount: Int
+        val filteredSpamCount: Int,
+        val isFailed: Boolean = false
     )
 
     private val config by lazy { properties("mail_summary") }
@@ -117,7 +118,7 @@ class MailSummary : EventUnit(
                     } catch (e: Exception) {
                         warning("[MailSummary] mailbox=${mb.id}(${mb.label}) failed: ${e.message}")
                         e.printStackTrace()
-                        MailboxSummary(mb.label, emptyList(), 0)
+                        MailboxSummary(mb.label, emptyList(), 0, isFailed = true)
                     }
                 }
             }.awaitAll()
@@ -159,7 +160,7 @@ class MailSummary : EventUnit(
                             } catch (e: Exception) {
                                 warning("[MailSummary] mailbox=${mb.id}(${mb.label}) failed: ${e.message}")
                                 e.printStackTrace()
-                                MailboxSummary(mb.label, emptyList(), 0)
+                                MailboxSummary(mb.label, emptyList(), 0, isFailed = true)
                             }
                         }
                     }.awaitAll()
@@ -286,7 +287,7 @@ class MailSummary : EventUnit(
             append("请基于以下邮件摘要，写一段不超过 80 字的总体总结，语气友好、口语化，避免逐条复述。\n")
             results.forEach { result ->
                 if (result.summaries.isNotEmpty()) {
-                    append("【").append(result.label).append("】\n")
+                    append(result.label).append("\n")
                     result.summaries.forEachIndexed { i, s ->
                         append(i + 1).append(". ").append(s).append("\n")
                     }
@@ -305,7 +306,7 @@ class MailSummary : EventUnit(
             Slot.NOON -> "下午好"
             Slot.NIGHT -> "晚上好"
         }
-        val header = "$greeting！这里是你的邮件小助手，已为你整理 ${slot.label} 时段（%02d:00 推送）的摘要。"
+        val header = "$greeting！已整理 ${slot.label} 时段（%02d:00 推送）的邮箱摘要:"
             .format(slot.hour)
         return formatBody(header, results, allEmptyHint = "本时段无重要邮件", overallSummary = overallSummary)
     }
@@ -314,7 +315,7 @@ class MailSummary : EventUnit(
         results: List<MailboxSummary>,
         overallSummary: String?
     ): String {
-        val header = "邮件摘要 (近 24 小时)"
+        val header = "邮件摘要 (近 24 小时):"
         return formatBody(header, results, allEmptyHint = "近 24 小时无重要邮件", overallSummary = overallSummary)
     }
 
@@ -324,25 +325,39 @@ class MailSummary : EventUnit(
         allEmptyHint: String,
         overallSummary: String?
     ): String {
-        val spamCount = results.sumOf { it.filteredSpamCount }
-        val spamHint = "过滤了${spamCount}封垃圾邮件"
-        val summaryHint = overallSummary?.let { "\n\n总体总结：$it" }.orEmpty()
-        if (results.all { it.summaries.isEmpty() }) {
-            return "$header\n$spamHint\n\n$allEmptyHint$summaryHint"
+        val allSuccess = results.none { it.isFailed }
+        val anySummaries = results.any { it.summaries.isNotEmpty() }
+        val summaryHeader = overallSummary.orEmpty()
+
+        if (!anySummaries && allSuccess) {
+            val spamDetails = results.filter { it.filteredSpamCount > 0 }
+                .joinToString(", ") { "${it.label}过滤 ${it.filteredSpamCount} 封" }
+            val spamHint = if (spamDetails.isNotEmpty()) " ($spamDetails)" else ""
+            return "$header\n$summaryHeader\n\n$allEmptyHint$spamHint"
         }
+
         val body = buildString {
             results.forEach { result ->
-                append("\n\n【").append(result.label).append("】")
-                if (result.summaries.isEmpty()) {
-                    append("\n（无重要邮件）")
-                } else {
-                    result.summaries.forEachIndexed { i, s ->
-                        append("\n").append(i + 1).append(". ").append(s)
+                append("\n\n").append(result.label)
+                when {
+                    result.isFailed -> {
+                        append(" (获取失败):")
+                    }
+                    result.summaries.isEmpty() -> {
+                        val filterText = if (result.filteredSpamCount > 0) " (过滤 ${result.filteredSpamCount} 封):" else " (无新邮件):"
+                        append(filterText).append("\n暂无重要邮件")
+                    }
+                    else -> {
+                        val filterText = if (result.filteredSpamCount > 0) " (过滤 ${result.filteredSpamCount} 封):" else ":"
+                        append(filterText)
+                        result.summaries.forEachIndexed { i, s ->
+                            append("\n").append(i + 1).append(". ").append(s)
+                        }
                     }
                 }
             }
         }
-        return "$header\n$spamHint$body$summaryHint"
+        return "$header\n$summaryHeader$body"
     }
 
     private fun parseMailboxes(cfg: Properties): List<MailboxConfig> {
