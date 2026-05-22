@@ -18,10 +18,11 @@ class AIClient(
     }
 
     fun ask(input: String): String {
+        val finalSystemPrompt = systemPrompt + AiMemoryStore.asPromptSuffix()
         val request = ChatRequest(
             model = model,
             messages = listOf(
-                Message("system", systemPrompt),
+                Message("system", finalSystemPrompt),
                 Message("user", input)
             )
         )

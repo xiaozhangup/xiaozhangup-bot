@@ -1,5 +1,6 @@
 package me.xiaozhangup.bot
 
+import me.xiaozhangup.bot.func.AiMemory
 import me.xiaozhangup.bot.func.CodeForcesContest
 import me.xiaozhangup.bot.func.DoistTask
 import me.xiaozhangup.bot.func.MailSummary
@@ -81,6 +82,7 @@ class OverflowBot : LifeCycle {
         EventBus.register(CodeForcesContest())
         EventBus.register(DoistTask())
         EventBus.register(MailSummary())
+        EventBus.register(AiMemory())
     }
 
     override fun onDisable() {
