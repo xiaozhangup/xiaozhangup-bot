@@ -43,7 +43,8 @@ class MailSummary : EventUnit(
         val label: String,
         val summaries: List<String>,
         val filteredSpamCount: Int,
-        val isFailed: Boolean = false
+        val isFailed: Boolean = false,
+        val failureReason: String? = null
     )
 
     private val config by lazy { properties("mail_summary") }
@@ -118,7 +119,7 @@ class MailSummary : EventUnit(
                     } catch (e: Exception) {
                         warning("[MailSummary] mailbox=${mb.id}(${mb.label}) failed: ${e.message}")
                         e.printStackTrace()
-                        MailboxSummary(mb.label, emptyList(), 0, isFailed = true)
+                        MailboxSummary(mb.label, emptyList(), 0, isFailed = true, failureReason = e.message ?: e.toString())
                     }
                 }
             }.awaitAll()
@@ -160,7 +161,7 @@ class MailSummary : EventUnit(
                             } catch (e: Exception) {
                                 warning("[MailSummary] mailbox=${mb.id}(${mb.label}) failed: ${e.message}")
                                 e.printStackTrace()
-                                MailboxSummary(mb.label, emptyList(), 0, isFailed = true)
+                                MailboxSummary(mb.label, emptyList(), 0, isFailed = true, failureReason = e.message ?: e.toString())
                             }
                         }
                     }.awaitAll()
@@ -284,7 +285,7 @@ class MailSummary : EventUnit(
 
     private fun buildOverallSummaryInput(results: List<MailboxSummary>): String {
         return buildString {
-            append("请基于以下邮件摘要，写一段不超过 80 字的总体总结，语气友好、口语化，避免逐条复述。\n")
+            append("请对以下邮件摘要进行客观、直白、高效的总体总结，不超过 80 字，无需任何情绪色彩，直接提炼核心事项，避免逐条复述。\n")
             results.forEach { result ->
                 if (result.summaries.isNotEmpty()) {
                     append(result.label).append("\n")
@@ -342,6 +343,7 @@ class MailSummary : EventUnit(
                 when {
                     result.isFailed -> {
                         append(" (获取失败):")
+                        append("\n").append(result.failureReason?.take(120) ?: "未知错误")
                     }
                     result.summaries.isEmpty() -> {
                         val filterText = if (result.filteredSpamCount > 0) " (过滤 ${result.filteredSpamCount} 封):" else " (无新邮件):"
@@ -400,8 +402,8 @@ class MailSummary : EventUnit(
 
         private val OVERALL_SUMMARY_PROMPT = """
             你是邮件总体总结助手。用户提供各邮箱的摘要条目。
-            请输出一段中文总体总结，语气友好、口语化，不超过 80 字。
-            不要逐条复述，不要输出列表或编号，不要添加任何额外格式。
+            请用客观、直白、高效且不带任何情绪色彩的中文写一段总体总结，不超过 80 字。
+            无需友好寒暄、客套或口语化修饰，直接提炼关键事项，不要逐条复述，有多个要点时，不同要点之间使用逗号进行分隔，不要输出列表或编号。
         """.trimIndent()
     }
 }
