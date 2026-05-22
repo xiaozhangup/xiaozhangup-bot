@@ -184,6 +184,7 @@ class MailSummary : EventUnit(
         val raw = ImapClient(mb).fetchSince(since, bodyMaxChars)
         val filtered = raw
             .filterNot { hitsPrefilterKeywords(it) }
+            .sortedByDescending { it.receivedAt }
             .mapIndexed { i, m -> m.copy(index = i) }
         val prefilterSpamCount = raw.size - filtered.size
 

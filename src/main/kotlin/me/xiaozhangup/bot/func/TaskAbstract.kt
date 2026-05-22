@@ -147,13 +147,15 @@ class TaskAbstract : EventUnit(
         val groupId = message.source.id
         if (!snifferGroups.contains(groupId)) return
 
+        val raw = message.getMessage()
+        if (raw.trimStart().startsWith("/")) return
+
         // 将消息写入原始历史记录
         history.getOrPut(groupId) { FixedSizeMap(32) }[message.id] = message
 
         val senderId = message.getSender()?.id ?: throw Exception(
             "Unable to fetch sender id from ${message.getMessage().take(32)} (${groupId})"
         )
-        val raw = message.getMessage()
 
         // 1. 将当前消息存入该用户的上下文缓存
         val groupMap = contextBuffer.getOrPut(groupId) { ConcurrentHashMap() }
