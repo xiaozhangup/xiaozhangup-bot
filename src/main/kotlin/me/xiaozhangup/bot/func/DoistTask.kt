@@ -1,10 +1,12 @@
 package me.xiaozhangup.bot.func
 
+import me.xiaozhangup.bot.client.doist.SectionBindingStore
 import me.xiaozhangup.bot.client.doist.TodoistClient
 import me.xiaozhangup.bot.port.Message
 import me.xiaozhangup.bot.port.Reaction
 import me.xiaozhangup.bot.port.Source
 import me.xiaozhangup.bot.port.unit.EventUnit
+import me.xiaozhangup.bot.util.dataFolder
 import me.xiaozhangup.bot.util.properties
 import me.xiaozhangup.bot.util.submit
 import java.time.LocalDate
@@ -33,6 +35,7 @@ class DoistTask : EventUnit(
         }
         TodoistClient(token)
     }
+    private val bindingStore by lazy { SectionBindingStore(dataFolder("doist_task")) }
 
     override fun onGroupMessage(message: Message) {
         if (message.source.id !in targetGroups) return
@@ -49,7 +52,7 @@ class DoistTask : EventUnit(
         val sourceId = message.source.id
         if (!raw.startsWith("/task")) {
             if (raw == "/inbox") {
-                message.addReply(listSectionTasks(sourceId, null))
+                message.addReply(listSectionTasks(sourceId, bindingStore.get(sourceId)))
             }
             return
         }
@@ -89,8 +92,28 @@ class DoistTask : EventUnit(
                         }
                     }
 
+                    command in setOf("bind", "b") -> {
+                        val sectionAlias = arg.toIntOrNull()
+                        val sectionId = sectionAlias?.let { sectionAliasStore[sourceId]?.get(it) }
+                        if (sectionAlias == null || sectionId == null) {
+                            message.addReply("参数错误：/task bind <板块编号> (先用 /task sections 查看板块)")
+                        } else {
+                            bindingStore.set(sourceId, sectionId)
+                            val sectionName = runCatching { doistClient.getSection(sectionId).name }.getOrNull()
+                            message.addReply("已绑定到板块: ${sectionName ?: sectionId}")
+                        }
+                    }
+
+                    command in setOf("unbind", "u") -> {
+                        if (bindingStore.remove(sourceId)) {
+                            message.addReply("已解除当前绑定")
+                        } else {
+                            message.addReply("当前没有绑定的板块")
+                        }
+                    }
+
                     command in setOf("add", "a") -> {
-                        addTask(arg, message.getSender())
+                        addTask(arg, message.getSender(), bindingStore.get(sourceId))
                         if (isGroup) {
                             message.addReaction(Reaction.SPARK)
                         } else {
@@ -99,7 +122,7 @@ class DoistTask : EventUnit(
                     }
 
                     else -> {
-                        addTask(content, message.getSender())
+                        addTask(content, message.getSender(), bindingStore.get(sourceId))
                         if (isGroup) {
                             message.addReaction(Reaction.SPARK)
                         } else {
@@ -112,6 +135,7 @@ class DoistTask : EventUnit(
                     command in setOf("sections", "s") -> "列出板块失败"
                     command in setOf("tasks", "t") -> "获取板块任务失败"
                     command in setOf("delete", "d") -> "删除任务失败"
+                    command in setOf("bind", "b") -> "绑定板块失败"
                     else -> "添加任务失败"
                 }
                 message.addReply("$msg: ${e.message ?: "未知错误"}")
@@ -122,7 +146,7 @@ class DoistTask : EventUnit(
         }
     }
 
-    private fun addTask(string: String, source: Source?) {
+    private fun addTask(string: String, source: Source?, sectionId: String?) {
         if (string.isBlank()) {
             throw IllegalArgumentException("请提供任务内容")
         }
@@ -130,6 +154,7 @@ class DoistTask : EventUnit(
         val time = "${LocalDate.now()} ${LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))}"
         doistClient.createTask(
             content = chunk[0],
+            sectionId = sectionId,
             description = "${
                 if (chunk.size > 1) {
                     chunk[1] + "\n\n"
@@ -193,16 +218,22 @@ class DoistTask : EventUnit(
     private fun helpMessage(): String {
         return """
             1) /task <任务内容>
-               功能: 快速添加任务
-             
+               功能: 快速添加任务（按当前群绑定的板块）
+
             2) /task sections
                功能: 列出所有板块
-             
+
             3) /task tasks <板块编号>
                功能: 列出某板块的任务清单
-             
+
             4) /task close <任务编号>
                功能: 关闭指定任务
+
+            5) /task bind <板块编号>
+               功能: 将当前会话绑定到指定板块
+
+            6) /task unbind
+               功能: 解除当前会话的板块绑定
         """.trimIndent()
     }
 }

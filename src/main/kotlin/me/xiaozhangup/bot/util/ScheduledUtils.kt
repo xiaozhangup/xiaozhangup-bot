@@ -59,13 +59,14 @@ object ScheduledUtils {
         val currentMinute = now.minute
         val currentDate = java.time.LocalDate.now().toString()
 
-        scheduledTasks.forEach { (id, info) ->
+        scheduledTasks.forEach { (_, info) ->
             if (info.hour == currentHour && info.minute == currentMinute) {
-                if (info.lastExecutedDate != currentDate) {
+                synchronized(info) {
+                    if (info.lastExecutedDate == currentDate) return@synchronized
+                    info.lastExecutedDate = currentDate
                     scope.launch {
                         try {
                             info.task()
-                            info.lastExecutedDate = currentDate
                         } catch (e: Exception) {
                             e.printStackTrace()
                         }

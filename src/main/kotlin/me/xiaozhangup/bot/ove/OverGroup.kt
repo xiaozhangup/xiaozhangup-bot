@@ -22,4 +22,10 @@ class OverGroup(
             oveGroup.sendMessage(asMessageChain(*messages))
         }
     }
+
+    override fun getMemberName(memberId: String): String? {
+        val id = memberId.toLongOrNull() ?: return null
+        val member = oveGroup[id] ?: return null
+        return member.nameCard.ifBlank { member.nick }
+    }
 }

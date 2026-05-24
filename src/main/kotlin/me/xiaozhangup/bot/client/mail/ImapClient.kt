@@ -12,7 +12,7 @@ import java.util.Properties
 
 class ImapClient(private val cfg: MailboxConfig) {
 
-    fun fetchSince(since: Long, bodyMaxChars: Int = 2000): List<FetchedMail> {
+    fun fetchSince(since: Long, until: Long = Long.MAX_VALUE, bodyMaxChars: Int = 2000): List<FetchedMail> {
         val props = Properties().apply {
             val protocol = if (cfg.ssl) "imaps" else "imap"
             setProperty("mail.store.protocol", protocol)
@@ -34,11 +34,12 @@ class ImapClient(private val cfg: MailboxConfig) {
             val folder = store.getFolder("INBOX")
             folder.open(Folder.READ_ONLY)
             try {
+                // IMAP SEARCH SINCE/BEFORE 在多数服务器上仅精确到日期，需要在客户端按精确时间二次过滤。
                 val term = ReceivedDateTerm(ComparisonTerm.GE, Date(since))
                 val messages = folder.search(term)
                 return messages.mapIndexedNotNull { i, msg ->
                     runCatching { toFetchedMail(i, msg, bodyMaxChars) }.getOrNull()
-                }
+                }.filter { it.receivedAt in since until until }
             } finally {
                 runCatching { folder.close(false) }
             }

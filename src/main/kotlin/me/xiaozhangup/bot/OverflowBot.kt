@@ -7,6 +7,7 @@ import me.xiaozhangup.bot.func.MailSummary
 import me.xiaozhangup.bot.func.PingPong
 import me.xiaozhangup.bot.func.TaskAbstract
 import me.xiaozhangup.bot.func.WeatherReminder
+import me.xiaozhangup.bot.person.PersonChat
 import me.xiaozhangup.bot.ove.OverFriendMessage
 import me.xiaozhangup.bot.ove.OverGroupMessage
 import me.xiaozhangup.bot.port.Contact
@@ -83,6 +84,7 @@ class OverflowBot : LifeCycle {
         EventBus.register(DoistTask())
         EventBus.register(MailSummary())
         EventBus.register(AiMemory())
+        EventBus.register(PersonChat())
     }
 
     override fun onDisable() {

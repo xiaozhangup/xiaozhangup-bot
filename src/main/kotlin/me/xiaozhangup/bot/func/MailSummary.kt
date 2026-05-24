@@ -110,12 +110,13 @@ class MailSummary : EventUnit(
             return
         }
 
-        info("[MailSummary] Running slot=$slot for ${mailboxes.size} mailbox(es).")
+        val slotEnd = computeSlotEnd(slot)
+        info("[MailSummary] Running slot=$slot for ${mailboxes.size} mailbox(es), until=$slotEnd.")
         val results = coroutineScope {
             mailboxes.map { mb ->
                 async(Dispatchers.IO) {
                     try {
-                        processMailbox(mb, computeSince(mb.id, slot), recordState = slot.name)
+                        processMailbox(mb, computeSince(mb.id, slot), slotEnd, recordState = slot.name)
                     } catch (e: Exception) {
                         warning("[MailSummary] mailbox=${mb.id}(${mb.label}) failed: ${e.message}")
                         e.printStackTrace()
@@ -151,13 +152,14 @@ class MailSummary : EventUnit(
         message.addReaction(Reaction.SPARK)
         submit {
             try {
-                val since = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+                val now = System.currentTimeMillis()
+                val since = now - 24 * 60 * 60 * 1000L
                 info("[MailSummary] Manual /mailbox triggered, since=$since (24h).")
                 val results = coroutineScope {
                     mailboxes.map { mb ->
                         async(Dispatchers.IO) {
                             try {
-                                processMailbox(mb, since, recordState = null)
+                                processMailbox(mb, since, now, recordState = null)
                             } catch (e: Exception) {
                                 warning("[MailSummary] mailbox=${mb.id}(${mb.label}) failed: ${e.message}")
                                 e.printStackTrace()
@@ -179,19 +181,20 @@ class MailSummary : EventUnit(
     private fun processMailbox(
         mb: MailboxConfig,
         since: Long,
+        until: Long,
         recordState: String?
     ): MailboxSummary {
-        val raw = ImapClient(mb).fetchSince(since, bodyMaxChars)
+        val raw = ImapClient(mb).fetchSince(since, until, bodyMaxChars)
         val filtered = raw
             .filterNot { hitsPrefilterKeywords(it) }
             .sortedByDescending { it.receivedAt }
             .mapIndexed { i, m -> m.copy(index = i) }
         val prefilterSpamCount = raw.size - filtered.size
 
-        info("[MailSummary] mailbox=${mb.id}(${mb.label}) fetched=${raw.size} afterPrefilter=${filtered.size} since=$since")
+        info("[MailSummary] mailbox=${mb.id}(${mb.label}) fetched=${raw.size} afterPrefilter=${filtered.size} since=$since until=$until")
 
         if (filtered.isEmpty()) {
-            if (recordState != null) stateStore.setLastRun(mb.id, recordState, System.currentTimeMillis())
+            if (recordState != null) stateStore.setLastRun(mb.id, recordState, until)
             return MailboxSummary(mb.label, emptyList(), prefilterSpamCount)
         }
 
@@ -205,9 +208,15 @@ class MailSummary : EventUnit(
             .filter { it.isUseful && it.summary.isNotBlank() }
             .map { it.summary.trim() }
         info("[MailSummary] mailbox=${mb.id} AI summarize finished, total ${useful.size}.")
-        if (recordState != null) stateStore.setLastRun(mb.id, recordState, System.currentTimeMillis())
+        if (recordState != null) stateStore.setLastRun(mb.id, recordState, until)
         val spamCount = raw.size - useful.size
         return MailboxSummary(mb.label, useful, spamCount)
+    }
+
+    private fun computeSlotEnd(slot: Slot): Long {
+        val zone = ZoneId.systemDefault()
+        return LocalDateTime.of(LocalDate.now(), LocalTime.of(slot.hour, 0))
+            .atZone(zone).toInstant().toEpochMilli()
     }
 
     private fun computeSince(mailboxId: String, slot: Slot): Long {
@@ -216,8 +225,10 @@ class MailSummary : EventUnit(
         val slotStartHour = slot.hour - slot.windowHours
         val slotStartMillis = LocalDateTime.of(today, LocalTime.of(slotStartHour.coerceAtLeast(0), 0))
             .atZone(zone).toInstant().toEpochMilli()
+        val slotEndMillis = computeSlotEnd(slot)
         val last = stateStore.getLastRun(mailboxId, slot.name) ?: return slotStartMillis
-        return maxOf(last, slotStartMillis)
+        // last 必须落在本时段窗口内才有意义；跨天的旧值或异常值都退回到 slotStart。
+        return last.coerceIn(slotStartMillis, slotEndMillis)
     }
 
     private fun hitsPrefilterKeywords(m: FetchedMail): Boolean {
