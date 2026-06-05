@@ -193,10 +193,8 @@ class TaskAbstract : EventUnit(
         if (source is Group && source.id == notificationGroup.id) {
             message.addReaction(Reaction.SPARK)
         }
-        if (similarityStore.insert(raw) > 0.8) {
-            message.replyOrSend("与历史消息高度相似，已忽略")
-            return
-        }
+        similarityStore.insert(raw)
+
         submit {
             val tasks = fetchResults(raw)
             if (tasks.isNullOrEmpty()) {
