@@ -12,13 +12,14 @@ class OverflowContact(
 ) : Contact {
 
     override fun getGroup(id: String): Group? {
-        return bot.getGroup(id.toLong())?.let {
+        return bot.getGroup(id.toLongOrNull() ?: return null)?.let {
             OverGroup(it)
         }
     }
 
     override fun getUser(id: String): User? {
-        return bot.getFriend(id.toLong())?.let {
+        val userId = id.toLongOrNull() ?: return null
+        return (bot.getFriend(userId) ?: bot.getStranger(userId))?.let {
             OverUser(it)
         }
     }
