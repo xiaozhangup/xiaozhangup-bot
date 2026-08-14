@@ -42,4 +42,5 @@ dependencies {
 
     implementation("org.eclipse.angus:jakarta.mail:2.0.3")
     implementation("jakarta.activation:jakarta.activation-api:2.1.3")
+    testImplementation(kotlin("test"))
 }
