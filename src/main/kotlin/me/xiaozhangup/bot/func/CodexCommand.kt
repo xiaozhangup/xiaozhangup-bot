@@ -17,6 +17,7 @@ import me.xiaozhangup.bot.port.Group
 import me.xiaozhangup.bot.port.GroupFile
 import me.xiaozhangup.bot.port.Source
 import me.xiaozhangup.bot.port.msg.obj.ImageComponent
+import me.xiaozhangup.bot.port.msg.obj.QuoteComponent
 import me.xiaozhangup.bot.port.unit.EventUnit
 import me.xiaozhangup.bot.util.properties
 import me.xiaozhangup.bot.util.submit
@@ -49,6 +50,8 @@ class CodexCommand : EventUnit(
     private val workers = ConcurrentHashMap.newKeySet<String>()
     private val cliBusyGroups = ConcurrentHashMap.newKeySet<String>()
     private val temporaryImages = ConcurrentHashMap<String, ConcurrentLinkedQueue<File>>()
+    // 记录本功能发到各群的消息 ID，用于精确识别"引用回复了 Codex 消息"
+    private val sentCodexMessageIds = ConcurrentHashMap<String, MutableSet<Int>>()
 
     @Volatile
     private var appServer: CodexAppServer? = null
@@ -57,25 +60,36 @@ class CodexCommand : EventUnit(
         if (message.source.id !in enabledGroups) return
 
         val images = message.component.filterIsInstance<ImageComponent>().map { it.context }.filter(String::isNotBlank)
-        val raw = message.component.filterNot { it is ImageComponent }.joinToString("") { it.asString() }.trim()
+        val quotes = message.component.filterIsInstance<QuoteComponent>().filter { it.context.isNotBlank() }
+        val raw = message.component
+            .filterNot { it is ImageComponent || it is QuoteComponent }
+            .joinToString("") { it.asString() }.trim()
         when {
-            raw == "/codex" || raw == "/x" -> if (images.isEmpty()) {
+            raw == "/codex" || raw == "/x" -> if (images.isEmpty() && quotes.isEmpty()) {
                 message.addReply("用法：/codex <任务> 或 /x <任务>；新会话使用 /codex new 或 /x new")
             } else {
-                handleCodex(message, "", images)
+                handleCodex(message, "", images, quotes)
             }
-            raw.startsWith("/codex ") || raw.startsWith("/x ") -> handleCodex(message, raw.substringAfter(' ').trim(), images)
+            raw.startsWith("/codex ") || raw.startsWith("/x ") -> handleCodex(message, raw.substringAfter(' ').trim(), images, quotes)
             raw == "/cli" -> message.addReply("用法：/cli <bash 命令>")
             raw.startsWith("/cli ") -> handleCli(message, raw.removePrefix("/cli").trim())
+            // 引用了本功能(Codex)发出的消息：即使没有 /x 前缀，也当作 /x 处理
+            else -> if (isQuoteToCodexMessage(quotes, sentCodexMessageIds[message.source.id]) && !raw.startsWith("/")) {
+                handleCodex(message, raw, images, quotes)
+            }
         }
     }
 
-    private fun handleCodex(message: Message, content: String, images: List<String>) {
+    private fun handleCodex(message: Message, content: String, images: List<String>, quotes: List<QuoteComponent>) {
         if (content.startsWith("new ")) {
             message.addReply("new 后不跟任务，请在下一条 /codex 或 /x 消息中发送任务")
             return
         }
-        enqueue(message.source.id, if (content == "new") Reset(message.source) else Prompt(content, images, message))
+        enqueue(
+            message.source.id,
+            if (content == "new") Reset(message.source)
+            else Prompt(buildPrompt(quotes.map { it.context }, content), images, message)
+        )
     }
 
     private fun handleCli(message: Message, command: String) {
@@ -93,9 +107,9 @@ class CodexCommand : EventUnit(
                     output.isEmpty() -> "命令执行完成，无输出"
                     else -> output
                 }
-                reply.chunked(4000).forEach(message.source::sendMessage)
+                reply.chunked(4000).forEach { sendToGroup(message.source, message.source.id, it) }
             } catch (e: Exception) {
-                message.source.sendMessage("命令启动失败：${e.message ?: "未知错误"}")
+                sendToGroup(message.source, message.source.id, "命令启动失败：${e.message ?: "未知错误"}")
             } finally {
                 cliBusyGroups.remove(message.source.id)
             }
@@ -234,11 +248,12 @@ class CodexCommand : EventUnit(
             }
 
             "item/completed" -> appServerAgentMessage(message)?.let { text ->
-                stripMarkdown(text).takeIf(String::isNotBlank)?.let { groupSources[groupId]?.sendMessage(it) }
+                val content = stripMarkdown(text).trim()
+                if (content.isNotBlank()) groupSources[groupId]?.let { sendToGroup(it, groupId, content) }
             }
 
             "error" -> params["error"]?.jsonObject?.string("message")?.let { error ->
-                groupSources[groupId]?.sendMessage("Codex 执行失败：${stripMarkdown(error)}")
+                groupSources[groupId]?.let { sendToGroup(it, groupId, "Codex 执行失败：${stripMarkdown(error)}") }
             }
 
             "turn/completed" -> {
@@ -251,6 +266,18 @@ class CodexCommand : EventUnit(
                 if (session.activeTurnId == turnId) session.activeTurnId = null
                 while (true) enqueue(groupId, session.deferred.poll() ?: break)
             }
+        }
+    }
+
+    /**
+     * 把消息发到群里，并记录发送成功后分配的消息 ID，用于后续识别"引用回复了 Codex 消息"。
+     */
+    private fun sendToGroup(source: Source, groupId: String, text: String) {
+        val ids = source.sendMessageWithIds(text)
+        if (ids.isNotEmpty()) {
+            val set = sentCodexMessageIds.computeIfAbsent(groupId) { ConcurrentHashMap.newKeySet() }
+            set.addAll(ids)
+            if (set.size > MAX_RECORDED_MESSAGE_IDS) set.clear()
         }
     }
 
@@ -323,7 +350,9 @@ class CodexCommand : EventUnit(
             deleteAllImages()
             sessions.clear()
             threadGroups.clear()
-            groupSources.values.forEach { it.sendMessage("Codex App Server 已停止，下一条任务将创建新会话") }
+            groupSources.forEach { (groupId, source) ->
+                sendToGroup(source, groupId, "Codex App Server 已停止，下一条任务将创建新会话")
+            }
         }.also { appServer = it }
     }
 
@@ -419,6 +448,7 @@ class CodexCommand : EventUnit(
         const val IMAGE_TIMEOUT_MS = 10_000
         const val MAX_IMAGE_BYTES = 20 * 1024 * 1024
         const val GROUP_FILE_TIMEOUT_MS = 30_000
+        const val MAX_RECORDED_MESSAGE_IDS = 10_000
         const val SEND_QQ_FILE = "send_qq_file"
         const val LIST_QQ_GROUP_FILES = "list_qq_group_files"
         const val DOWNLOAD_QQ_GROUP_FILE = "download_qq_group_file"
@@ -533,6 +563,24 @@ internal fun formatGroupFiles(files: List<GroupFile>): String {
         } ?: "未知"
         "${it.name}：$date"
     }
+}
+
+/**
+ * 判断消息是否引用了本功能(Codex)发送过的消息：被引用消息的 ID 命中已发送记录即视为引用。
+ */
+internal fun isQuoteToCodexMessage(quotes: List<QuoteComponent>, sentIds: Collection<Int>?): Boolean =
+    quotes.any { quote -> sentIds?.any { it in quote.sourceIds } == true }
+
+/**
+ * 把引用回复内容和用户输入组装成发给 Codex 的 prompt。
+ * 引用内容用"引用消息："标记，与用户自己的输入区分开。
+ */
+internal fun buildPrompt(quotes: List<String>, text: String): String {
+    val parts = buildList {
+        quotes.forEach { add("引用消息：$it") }
+        if (text.isNotBlank()) add(text)
+    }
+    return parts.joinToString("\n\n")
 }
 
 internal fun codexInput(text: String, images: List<String>) = buildJsonArray {

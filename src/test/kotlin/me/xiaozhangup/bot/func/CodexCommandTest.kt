@@ -1,5 +1,6 @@
 package me.xiaozhangup.bot.func
 
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -10,10 +11,21 @@ import kotlinx.serialization.json.put
 import me.xiaozhangup.bot.client.codexAppServerCommand
 import me.xiaozhangup.bot.ove.groupFileTimestamp
 import me.xiaozhangup.bot.port.GroupFile
+import me.xiaozhangup.bot.port.msg.obj.QuoteComponent
+import me.xiaozhangup.bot.port.msg.obj.StringComponent
+import me.xiaozhangup.bot.util.asMessage
+import me.xiaozhangup.bot.util.quoteContent
+import net.mamoe.mirai.message.data.MessageSourceBuilder
+import net.mamoe.mirai.message.data.MessageSourceKind
+import net.mamoe.mirai.message.data.PlainText
+import net.mamoe.mirai.message.data.QuoteReply
+import net.mamoe.mirai.message.data.buildMessageChain
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CodexCommandTest {
@@ -158,5 +170,77 @@ class CodexCommandTest {
         assertTrue(result.timedOut)
         assertEquals("partial", result.output)
         directory.delete()
+    }
+
+    @Test
+    fun quoteComponentIsMetadataAndHiddenFromTextJoin() {
+        val quote = QuoteComponent("被引用的内容", listOf(1, 2, 3))
+
+        assertEquals("被引用的内容", quote.context)
+        assertEquals(listOf(1, 2, 3), quote.sourceIds)
+        assertEquals("", quote.asString())
+        assertEquals("我的回复", (listOf(quote, StringComponent("我的回复"))).joinToString("") { it.asString() })
+    }
+
+    @Test
+    fun detectsQuoteToCodexMessageByMessageId() {
+        val codexQuote = QuoteComponent("Codex 发的消息", listOf(10, 11))
+        val otherQuote = QuoteComponent("别人的消息", listOf(20))
+
+        assertTrue(isQuoteToCodexMessage(listOf(codexQuote), setOf(10, 11)))
+        assertTrue(isQuoteToCodexMessage(listOf(otherQuote, codexQuote), setOf(11)))
+        assertTrue(!isQuoteToCodexMessage(listOf(otherQuote), setOf(10, 11)))
+        assertTrue(!isQuoteToCodexMessage(emptyList(), setOf(10, 11)))
+        assertTrue(!isQuoteToCodexMessage(listOf(codexQuote), null))
+        assertTrue(!isQuoteToCodexMessage(listOf(QuoteComponent("无 ID 的引用")), setOf(10, 11)))
+    }
+
+    @Test
+    fun buildsPromptWithQuotedMessages() {
+        assertEquals("", buildPrompt(emptyList(), ""))
+        assertEquals("处理这个", buildPrompt(emptyList(), "处理这个"))
+        assertEquals("引用消息：前一条消息", buildPrompt(listOf("前一条消息"), ""))
+        assertEquals(
+            "引用消息：第一条\n\n引用消息：第二条\n\n处理这个",
+            buildPrompt(listOf("第一条", "第二条"), "处理这个")
+        )
+    }
+
+    @Test
+    fun extractsQuotedContentFromQuoteReply() {
+        val source = MessageSourceBuilder()
+            .id(1, 2, 3)
+            .internalId(4)
+            .time(5)
+            .sender(123456L)
+            .target(654321L)
+            .messages { +PlainText("被引用的内容") }
+            .build(botId = 10001L, kind = MessageSourceKind.GROUP)
+
+        assertEquals("被引用的内容", quoteContent(source))
+        assertNull(quoteContent(MessageSourceBuilder().build(botId = 10001L, kind = MessageSourceKind.GROUP)))
+    }
+
+    @Test
+    fun convertsQuoteReplyToQuoteComponentWithoutPollutingText() = runBlocking {
+        val source = MessageSourceBuilder()
+            .id(1, 2, 3)
+            .internalId(4)
+            .time(5)
+            .sender(123456L)
+            .target(654321L)
+            .messages { +PlainText("被引用的内容") }
+            .build(botId = 10001L, kind = MessageSourceKind.GROUP)
+        val chain = buildMessageChain {
+            +QuoteReply(source)
+            +PlainText("我的回复")
+        }
+
+        val components = asMessage(chain)
+        assertEquals(2, components.size)
+        val quote = assertIs<QuoteComponent>(components[0])
+        assertEquals("被引用的内容", quote.context)
+        assertEquals(listOf(1, 2, 3), quote.sourceIds)
+        assertEquals("我的回复", components.joinToString("") { it.asString() })
     }
 }

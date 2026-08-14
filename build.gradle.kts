@@ -43,4 +43,7 @@ dependencies {
     implementation("org.eclipse.angus:jakarta.mail:2.0.3")
     implementation("jakarta.activation:jakarta.activation-api:2.1.3")
     testImplementation(kotlin("test"))
+
+    // 测试中构造 MessageSource/QuoteReply 需要 mirai-core 的实现（Mirai.instance）
+    testRuntimeOnly("net.mamoe:mirai-core:2.16.0")
 }

@@ -9,7 +9,8 @@ abstract class MessageComponent(
         IMAGE,
         AT,
         RICH,
-        CONTAINER
+        CONTAINER,
+        QUOTE
     }
 
     open fun asString(): String {

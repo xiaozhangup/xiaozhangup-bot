@@ -1,6 +1,7 @@
 package me.xiaozhangup.bot.ove
 
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -28,6 +29,11 @@ class OverGroup(
         oveGroup.launch {
             oveGroup.sendMessage(message)
         }
+    }
+
+    override fun sendMessageWithIds(message: String): List<Int> {
+        val receipt = runBlocking { oveGroup.sendMessage(message) }
+        return receipt.source.ids.toList()
     }
 
     override fun sendMessage(vararg messages: MessageComponent) {
