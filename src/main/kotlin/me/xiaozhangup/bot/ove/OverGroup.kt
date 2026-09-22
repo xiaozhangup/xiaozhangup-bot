@@ -52,6 +52,11 @@ class OverGroup(
         return member.nameCard.ifBlank { member.nick }
     }
 
+    override fun isMember(memberId: String): Boolean {
+        oveGroup.members.find { it.id.toString() == memberId }?.let { return true }
+        return false
+    }
+
     override fun setBotNickname(nickname: String) {
         oveGroup.botAsMember.nameCard = nickname
     }

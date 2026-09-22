@@ -15,6 +15,10 @@ abstract class Group(
         throw NotImplementedError()
     }
 
+    open fun isMember(memberId: String): Boolean {
+        throw NotImplementedError()
+    }
+
     open suspend fun sendFile(file: File) {
         throw NotImplementedError()
     }
