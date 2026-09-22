@@ -11,10 +11,11 @@ import kotlinx.serialization.json.put
 import me.xiaozhangup.bot.client.codexAppServerCommand
 import me.xiaozhangup.bot.ove.groupFileTimestamp
 import me.xiaozhangup.bot.port.GroupFile
+import me.xiaozhangup.bot.port.msg.obj.AtComponent
+import me.xiaozhangup.bot.port.msg.obj.ImageComponent
 import me.xiaozhangup.bot.port.msg.obj.QuoteComponent
 import me.xiaozhangup.bot.port.msg.obj.StringComponent
 import me.xiaozhangup.bot.util.asMessage
-import me.xiaozhangup.bot.util.quoteContent
 import net.mamoe.mirai.message.data.MessageSourceBuilder
 import net.mamoe.mirai.message.data.MessageSourceKind
 import net.mamoe.mirai.message.data.PlainText
@@ -25,7 +26,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CodexCommandTest {
@@ -198,6 +198,7 @@ class CodexCommandTest {
     @Test
     fun buildsPromptWithQuotedMessages() {
         assertEquals("", buildPrompt(emptyList(), ""))
+        assertEquals("", buildPrompt(listOf(""), ""))
         assertEquals("处理这个", buildPrompt(emptyList(), "处理这个"))
         assertEquals("引用消息：前一条消息", buildPrompt(listOf("前一条消息"), ""))
         assertEquals(
@@ -207,18 +208,29 @@ class CodexCommandTest {
     }
 
     @Test
-    fun extractsQuotedContentFromQuoteReply() {
-        val source = MessageSourceBuilder()
-            .id(1, 2, 3)
-            .internalId(4)
-            .time(5)
-            .sender(123456L)
-            .target(654321L)
-            .messages { +PlainText("被引用的内容") }
-            .build(botId = 10001L, kind = MessageSourceKind.GROUP)
+    fun includesImagesFromQuotedMessages() {
+        val components = listOf(
+            QuoteComponent("", listOf(1), listOf(ImageComponent("https://example.com/quoted.png"))),
+            ImageComponent("https://example.com/direct.png")
+        )
 
-        assertEquals("被引用的内容", quoteContent(source))
-        assertNull(quoteContent(MessageSourceBuilder().build(botId = 10001L, kind = MessageSourceKind.GROUP)))
+        assertEquals(
+            listOf("https://example.com/quoted.png", "https://example.com/direct.png"),
+            codexImageUrls(components)
+        )
+    }
+
+    @Test
+    fun removesOnlyFirstAtFromQuoteTriggeredText() {
+        val components = listOf(
+            QuoteComponent("被引用的 Codex 消息"),
+            AtComponent("10001"),
+            StringComponent(" 继续处理 "),
+            AtComponent("10002")
+        )
+
+        assertEquals("10001 继续处理 10002", codexText(components))
+        assertEquals("继续处理 10002", codexText(components, removeFirstAt = true))
     }
 
     @Test
@@ -241,6 +253,7 @@ class CodexCommandTest {
         val quote = assertIs<QuoteComponent>(components[0])
         assertEquals("被引用的内容", quote.context)
         assertEquals(listOf(1, 2, 3), quote.sourceIds)
+        assertEquals("被引用的内容", quote.components.single().asString())
         assertEquals("我的回复", components.joinToString("") { it.asString() })
     }
 }

@@ -13,5 +13,8 @@ abstract class EventUnit(
 
     open fun onFriendMessage(message: Message) {}
 
+    /** 设置向导等会话可消费消息，避免同时触发聊天或其他功能。 */
+    open fun interceptFriendMessage(message: Message): Boolean = false
+
     open fun onMessageReaction(message: Message, reaction: Reaction, operation: Boolean) {}
 }

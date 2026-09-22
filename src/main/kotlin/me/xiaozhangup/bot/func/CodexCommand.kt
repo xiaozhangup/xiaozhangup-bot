@@ -16,6 +16,8 @@ import me.xiaozhangup.bot.port.Reaction
 import me.xiaozhangup.bot.port.Group
 import me.xiaozhangup.bot.port.GroupFile
 import me.xiaozhangup.bot.port.Source
+import me.xiaozhangup.bot.port.msg.MessageComponent
+import me.xiaozhangup.bot.port.msg.obj.AtComponent
 import me.xiaozhangup.bot.port.msg.obj.ImageComponent
 import me.xiaozhangup.bot.port.msg.obj.QuoteComponent
 import me.xiaozhangup.bot.port.unit.EventUnit
@@ -59,11 +61,9 @@ class CodexCommand : EventUnit(
     override fun onGroupMessage(message: Message) {
         if (message.source.id !in enabledGroups) return
 
-        val images = message.component.filterIsInstance<ImageComponent>().map { it.context }.filter(String::isNotBlank)
-        val quotes = message.component.filterIsInstance<QuoteComponent>().filter { it.context.isNotBlank() }
-        val raw = message.component
-            .filterNot { it is ImageComponent || it is QuoteComponent }
-            .joinToString("") { it.asString() }.trim()
+        val images = codexImageUrls(message.component)
+        val quotes = message.component.filterIsInstance<QuoteComponent>()
+        val raw = codexText(message.component)
         when {
             raw == "/codex" || raw == "/x" -> if (images.isEmpty() && quotes.isEmpty()) {
                 message.addReply("用法：/codex <任务> 或 /x <任务>；新会话使用 /codex new 或 /x new")
@@ -75,7 +75,7 @@ class CodexCommand : EventUnit(
             raw.startsWith("/cli ") -> handleCli(message, raw.removePrefix("/cli").trim())
             // 引用了本功能(Codex)发出的消息：即使没有 /x 前缀，也当作 /x 处理
             else -> if (isQuoteToCodexMessage(quotes, sentCodexMessageIds[message.source.id]) && !raw.startsWith("/")) {
-                handleCodex(message, raw, images, quotes)
+                handleCodex(message, codexText(message.component, removeFirstAt = true), images, quotes)
             }
         }
     }
@@ -577,10 +577,26 @@ internal fun isQuoteToCodexMessage(quotes: List<QuoteComponent>, sentIds: Collec
  */
 internal fun buildPrompt(quotes: List<String>, text: String): String {
     val parts = buildList {
-        quotes.forEach { add("引用消息：$it") }
+        quotes.filter(String::isNotBlank).forEach { add("引用消息：$it") }
         if (text.isNotBlank()) add(text)
     }
     return parts.joinToString("\n\n")
+}
+
+internal fun codexImageUrls(components: List<MessageComponent>): List<String> =
+    components.flatMap { component ->
+        when (component) {
+            is ImageComponent -> listOf(component.context)
+            is QuoteComponent -> component.components.filterIsInstance<ImageComponent>().map { it.context }
+            else -> emptyList()
+        }
+    }.filter(String::isNotBlank)
+
+internal fun codexText(components: List<MessageComponent>, removeFirstAt: Boolean = false): String {
+    val firstAt = if (removeFirstAt) components.indexOfFirst { it is AtComponent } else -1
+    return components.filterIndexed { index, component ->
+        index != firstAt && component !is ImageComponent && component !is QuoteComponent
+    }.joinToString("") { it.asString() }.trim()
 }
 
 internal fun codexInput(text: String, images: List<String>) = buildJsonArray {

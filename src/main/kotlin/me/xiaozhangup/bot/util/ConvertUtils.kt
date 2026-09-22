@@ -57,7 +57,12 @@ suspend fun asMessage(chain: MessageChain): List<MessageComponent> {
             }
 
             is QuoteReply -> {
-                quoteContent(msg.source)?.let { QuoteComponent(it, msg.source.ids.toList()) }
+                val original = msg.source.originalMessage
+                QuoteComponent(
+                    original.contentToString().trim(),
+                    msg.source.ids.toList(),
+                    asMessage(original)
+                )
             }
 
             else -> {
@@ -67,15 +72,6 @@ suspend fun asMessage(chain: MessageChain): List<MessageComponent> {
             }
         }
     }
-}
-
-/**
- * 提取引用回复中被引用的原消息文本。
- * [MessageSource.originalMessage] 是惰性初始化的，未初始化时无法获取内容，返回 null。
- */
-internal fun quoteContent(source: MessageSource): String? {
-    if (!source.isOriginalMessageInitialized) return null
-    return source.originalMessage.contentToString().trim().takeIf(String::isNotBlank)
 }
 
 fun asMessageChain(vararg messages: MessageComponent): MessageChain {

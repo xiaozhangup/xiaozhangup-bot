@@ -9,6 +9,7 @@ import me.xiaozhangup.bot.func.CodeForcesContest
 import me.xiaozhangup.bot.func.CodexCommand
 import me.xiaozhangup.bot.func.DoistTask
 import me.xiaozhangup.bot.func.MailSummary
+import me.xiaozhangup.bot.func.MonthlyReminder
 import me.xiaozhangup.bot.func.PingPong
 import me.xiaozhangup.bot.func.TaskAbstract
 import me.xiaozhangup.bot.func.WeatherReminder
@@ -38,6 +39,7 @@ class OverflowBot : LifeCycle {
     private val contact by lazy { OverflowContact(Bot.instances[0]) }
     private val json = Json
     private val codexCommand = CodexCommand()
+    private var monthlyReminder: MonthlyReminder? = null
     private var httpServer: HttpServer? = null
 
     override fun onEnable() {
@@ -96,6 +98,7 @@ class OverflowBot : LifeCycle {
         EventBus.register(AiMemory())
         EventBus.register(PersonChat())
         EventBus.register(codexCommand)
+        monthlyReminder = MonthlyReminder().also { EventBus.register(it) }
 
         httpServer = HttpServer.create(InetSocketAddress(48247), 0).apply {
             createContext("/send") { handleSend(it) }
@@ -105,6 +108,7 @@ class OverflowBot : LifeCycle {
     }
 
     override fun onDisable() {
+        monthlyReminder?.close()
         codexCommand.close()
         httpServer?.stop(0)
         ScheduledUtils.stop()

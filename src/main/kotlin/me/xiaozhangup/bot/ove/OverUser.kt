@@ -11,6 +11,10 @@ class OverUser(
     oveUser.nick,
     oveUser.id.toString()
 ) {
+    override suspend fun sendMessageConfirmed(vararg messages: MessageComponent) {
+        oveUser.sendMessage(asMessageChain(*messages))
+    }
+
     override fun sendMessage(message: String) {
         oveUser.launch {
             oveUser.sendMessage(message)

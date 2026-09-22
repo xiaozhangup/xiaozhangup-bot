@@ -14,6 +14,11 @@ abstract class Source(
         throw NotImplementedError()
     }
 
+    /** 等待平台确认发送成功；失败时抛出异常，不代表接收人已读。 */
+    open suspend fun sendMessageConfirmed(vararg messages: MessageComponent) {
+        throw UnsupportedOperationException("当前联系人不支持确认发送结果")
+    }
+
     /**
      * 发送消息并返回发送成功后分配的消息 ID（用于后续识别引用回复）。
      * 默认实现走 [sendMessage] 且无法获得 ID，返回空列表；

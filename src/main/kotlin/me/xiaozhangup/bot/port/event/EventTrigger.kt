@@ -10,6 +10,7 @@ class EventTrigger {
     }
 
     fun triggerFriendMessage(message: Message) {
+        if (EventBus.getEvents().any { it.interceptFriendMessage(message) }) return
         EventBus.getEvents().forEach { it.onFriendMessage(message) }
     }
 

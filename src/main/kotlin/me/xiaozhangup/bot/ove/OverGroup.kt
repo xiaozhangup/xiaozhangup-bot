@@ -25,6 +25,10 @@ class OverGroup(
     oveGroup.name,
     oveGroup.id.toString()
 ) {
+    override suspend fun sendMessageConfirmed(vararg messages: MessageComponent) {
+        oveGroup.sendMessage(asMessageChain(*messages))
+    }
+
     override fun sendMessage(message: String) {
         oveGroup.launch {
             oveGroup.sendMessage(message)
