@@ -37,6 +37,8 @@ object ScheduledUtils {
         checkerTask = null
     }
 
+    fun getScheduler() = scope
+
     fun registerTask(
         id: String,
         hour: Int,
