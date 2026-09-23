@@ -24,19 +24,31 @@ class CodexUsage: EventUnit(
     1
 ) {
 
+    private var displayName = ""
+
     init {
         ScheduledUtils.getScheduler().launch {
             while (true) {
                 try {
+                    val group = getGroup("1033959018")!!
                     val usage = CodexUsage.fetchCodexUsage()
                     val window = usage.rateLimit?.primaryWindow!!
                     val reset = window.resetAt!! - window.limitWindowSeconds!!
                     val curr = currentTimeSeconds()
+                    val type = if (window.limitWindowSeconds < 60 * 60 * 6) "5小时" else "周"
 
                     if ((curr - reset) < 60 * 6) {
-                        getGroup("1033959018")?.sendMessage("Codex 额度已刷新")
+                        group.sendMessage("Codex 额度已刷新")
                     }
-                } finally { }
+
+                    val name = "${type}剩余 ${round(window.remainingPercent!!).toInt()}%"
+                    if (displayName != name) {
+                        group.setBotNickname(name)
+                        displayName = name
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 delay(5.minutes)
             }
         }
@@ -54,7 +66,7 @@ class CodexUsage: EventUnit(
                         val usage = CodexUsage.fetchCodexUsage()
                         val window = usage.rateLimit?.primaryWindow!!
                         val type = if (window.limitWindowSeconds!! < 60 * 60 * 6) "5小时" else "周"
-                        message.addReply("Codex ${type}额度剩余 ${round(window.remainingPercent!! * 100).toInt()}%")
+                        message.addReply("Codex ${type}额度剩余 ${round(window.remainingPercent!!).toInt()}%")
                     } catch (e: Exception) {
                         message.addReply("查询剩余额度状况失败: ${e.message}")
                     }
@@ -83,7 +95,7 @@ class CodexUsage: EventUnit(
                 val type = if (window.limitWindowSeconds!! < 60 * 60 * 6) "5小时" else "周"
                 message.addReply(
                     """
-                    Codex ${type}额度剩余 ${round(window.remainingPercent!! * 100).toInt()}%
+                    Codex ${type}额度剩余 ${round(window.remainingPercent!!).toInt()}%
                     下次刷新于 ${SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date(window.resetAt!! * 1000))}
                     """.trimIndent()
                 )
