@@ -11,7 +11,7 @@ abstract class Group(
 
     open fun getMemberName(memberId: String): String? = null
 
-    open fun setBotNickname(nickname: String) {
+    open fun setGroupName(name: String) {
         throw NotImplementedError()
     }
 

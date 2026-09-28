@@ -163,7 +163,7 @@ internal fun codexAppServerCommand() = listOf(
     "app-server",
     "--stdio",
     "-c",
-    "model=\"gpt-5.6-luna\"",
+    "model=\"gpt-6-luna\"",
     "-c",
     "model_reasoning_effort=\"max\"",
     "-c",

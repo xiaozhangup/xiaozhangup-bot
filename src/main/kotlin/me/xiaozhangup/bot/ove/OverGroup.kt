@@ -57,8 +57,8 @@ class OverGroup(
         return false
     }
 
-    override fun setBotNickname(nickname: String) {
-        oveGroup.botAsMember.nameCard = nickname
+    override fun setGroupName(name: String) {
+        oveGroup.name = name
     }
 
     override suspend fun sendFile(file: File) {

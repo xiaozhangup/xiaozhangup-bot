@@ -443,7 +443,7 @@ class CodexCommand : EventUnit(
     private data class Reset(override val source: Source) : CodexInput
 
     private companion object {
-        const val MODEL = "gpt-5.6-luna"
+        const val MODEL = "gpt-6-luna"
         const val EFFORT = "max"
         const val IMAGE_TIMEOUT_MS = 10_000
         const val MAX_IMAGE_BYTES = 20 * 1024 * 1024

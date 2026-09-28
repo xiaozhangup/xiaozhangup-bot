@@ -24,7 +24,7 @@ class CodexUsage: EventUnit(
     1
 ) {
 
-    private var displayName = ""
+    private var displayedPercent: Int? = null
 
     init {
         ScheduledUtils.getScheduler().launch {
@@ -35,16 +35,17 @@ class CodexUsage: EventUnit(
                     val window = usage.rateLimit?.primaryWindow!!
                     val reset = window.resetAt!! - window.limitWindowSeconds!!
                     val curr = currentTimeSeconds()
-                    val type = if (window.limitWindowSeconds < 60 * 60 * 6) "5小时" else "周"
-
                     if ((curr - reset) < 60 * 6) {
                         group.sendMessage("Codex 额度已刷新")
                     }
 
-                    val name = "${type}剩余 ${round(window.remainingPercent!!).toInt()}%"
-                    if (displayName != name) {
-                        group.setBotNickname(name)
-                        displayName = name
+                    val percent = round(window.remainingPercent!!).toInt()
+                    val suffix = Regex("（(\\d+)%）$")
+                    val previous = displayedPercent ?: suffix.find(group.name)?.groupValues?.get(1)?.toIntOrNull()
+                    if (previous == null || kotlin.math.abs(percent - previous) >= 3) {
+                        val name = "${group.name.replace(suffix, "")}（${percent}%）"
+                        group.setGroupName(name)
+                        displayedPercent = percent
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
