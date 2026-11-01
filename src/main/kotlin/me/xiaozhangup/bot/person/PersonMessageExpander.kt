@@ -7,28 +7,37 @@ import me.xiaozhangup.bot.port.msg.MessageComponent
 import me.xiaozhangup.bot.port.msg.obj.AtComponent
 import me.xiaozhangup.bot.port.msg.obj.ContainerComponent
 import me.xiaozhangup.bot.port.msg.obj.ImageComponent
+import me.xiaozhangup.bot.port.msg.obj.QuoteComponent
+
+data class ExpandedPersonMessage(val text: String, val images: List<String>)
 
 object PersonMessageExpander {
 
     private const val INDENT = "  "
     private const val MAX_DEPTH = 5
 
-    fun expand(message: Message): String {
+    fun expand(message: Message): ExpandedPersonMessage {
         val out = StringBuilder()
-        renderComponents(out, message.component, 0, message.source)
-        return out.toString().trim()
+        val images = mutableListOf<String>()
+        renderComponents(out, message.component, 0, message.source, images)
+        return ExpandedPersonMessage(out.toString().trim(), images)
     }
 
     private fun renderComponents(
         out: StringBuilder,
         components: List<MessageComponent>,
         depth: Int,
-        topSource: Source
+        topSource: Source,
+        images: MutableList<String>
     ) {
         components.forEach { comp ->
             when (comp) {
-                is ContainerComponent -> renderForward(out, comp, depth, topSource)
-                is ImageComponent -> renderImage(out, comp, depth)
+                is ContainerComponent -> renderForward(out, comp, depth, topSource, images)
+                is ImageComponent -> {
+                    images.add(comp.context)
+                    out.append("[图片${images.size}]")
+                }
+                is QuoteComponent -> renderQuote(out, comp, depth, topSource, images)
                 is AtComponent -> renderAt(out, comp, topSource)
                 else -> out.append(comp.asString())
             }
@@ -53,7 +62,8 @@ object PersonMessageExpander {
         out: StringBuilder,
         comp: ContainerComponent,
         depth: Int,
-        topSource: Source
+        topSource: Source,
+        images: MutableList<String>
     ) {
         if (out.isNotEmpty() && !out.endsWith('\n')) out.append('\n')
 
@@ -70,26 +80,24 @@ object PersonMessageExpander {
                 .append("[")
                 .append(sender.name)
                 .append("]: ")
-            renderComponents(out, node.component, depth + 1, topSource)
+            renderComponents(out, node.component, depth + 1, topSource, images)
             if (!out.endsWith('\n')) out.append('\n')
         }
     }
 
-    private fun renderImage(out: StringBuilder, comp: ImageComponent, depth: Int) {
-        val ocrText = PersonImageOCR.recognize(comp.context).trim()
-        if (ocrText.isEmpty()) {
-            out.append("[图片]")
-            return
+    private fun renderQuote(
+        out: StringBuilder,
+        comp: QuoteComponent,
+        depth: Int,
+        topSource: Source,
+        images: MutableList<String>
+    ) {
+        out.append("[引用消息] ")
+        if (depth >= MAX_DEPTH || comp.components.isEmpty()) {
+            out.append(comp.context)
+        } else {
+            renderComponents(out, comp.components, depth + 1, topSource, images)
         }
-        if ('\n' !in ocrText) {
-            out.append("[图片: ").append(ocrText).append("]")
-            return
-        }
-        if (out.isNotEmpty() && !out.endsWith('\n')) out.append('\n')
-        out.append(INDENT.repeat(depth)).append("[图片内容]\n")
-        ocrText.lines().filter { it.isNotBlank() }.forEach { line ->
-            out.append(INDENT.repeat(depth + 1)).append(line).append('\n')
-        }
-        out.append(INDENT.repeat(depth)).append("[/图片]")
+        out.append(" [/引用消息]\n")
     }
 }

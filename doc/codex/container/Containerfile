@@ -1,0 +1,24 @@
+ARG BASE_IMAGE=docker.io/library/node:22-bookworm-slim
+FROM ${BASE_IMAGE}
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates bash git curl openssh-client python3 python3-venv python3-pip \
+    ffmpeg ripgrep unzip zip tar xz-utils build-essential pkg-config \
+    iptables util-linux procps libglib2.0-0 libgl1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && usermod -l runner -d /home/runner node \
+    && mkdir -p /home/runner /workspace /codex /opt/legacy-python /home/xiaozhangup/文档 /home/xiaozhangup/.local/share/uv/python \
+    && chown 1000:1000 /home/runner /workspace /codex \
+    && ln -s /workspace /home/xiaozhangup/文档/QBot \
+    && ln -s /opt/legacy-python /home/xiaozhangup/.local/share/uv/python/cpython-3.12-linux-x86_64-gnu
+COPY codex codex-code-mode-host uv /usr/local/bin/
+COPY legacy-python/ /opt/legacy-python/
+COPY qbot-files.py /usr/local/bin/qbot-files
+COPY qbot-entrypoint.sh /usr/local/bin/qbot-entrypoint
+RUN chmod 755 /usr/local/bin/qbot-files /usr/local/bin/qbot-entrypoint \
+    && codex --version && node --version && /opt/legacy-python/bin/python3.12 --version
+ENV HOME=/home/runner CODEX_HOME=/codex LANG=C.UTF-8 \
+    PATH=/home/runner/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin \
+    UV_PYTHON_INSTALL_DIR=/home/runner/.local/share/uv/python \
+    NPM_CONFIG_PREFIX=/home/runner/.local
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/qbot-entrypoint"]

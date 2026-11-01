@@ -1,29 +1,31 @@
 package me.xiaozhangup.bot.person
 
-import me.xiaozhangup.bot.port.Message
-import me.xiaozhangup.bot.util.submitDelay
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
+import me.xiaozhangup.bot.port.Source
+import me.xiaozhangup.bot.port.msg.obj.StringComponent
 
 object PersonSender {
-
-    fun send(
-        message: Message,
+    suspend fun send(
+        source: Source,
         parts: List<String>,
-        charDelayMs: Long,
-        onSent: (String) -> Unit = {}
-    ) {
-        if (parts.isEmpty()) return
-        val source = message.source
-        source.sendMessage(parts[0])
-        onSent(parts[0])
-        var accumulatedDelay = parts[0].length * charDelayMs
-        for (idx in 1 until parts.size) {
-            val part = parts[idx]
-            submitDelay(accumulatedDelay, TimeUnit.MILLISECONDS) {
-                source.sendMessage(part)
+        profile: PersonProfile,
+        interruptedDuring: suspend (Long) -> Boolean,
+        onSent: (String) -> Unit
+    ): Boolean {
+        for (part in parts) {
+            val characters = part.codePointCount(0, part.length)
+            val delay = minOf(profile.maxDelayMs, profile.baseDelayMs + characters.toLong() * profile.charDelayMs)
+            if (interruptedDuring(delay)) return false
+            currentCoroutineContext().ensureActive()
+            // 已提交平台的这一条等回执；停用或新消息只阻止后续尚未提交的消息。
+            withContext(NonCancellable) {
+                source.sendMessageConfirmed(StringComponent(part))
                 onSent(part)
             }
-            accumulatedDelay += part.length * charDelayMs
         }
+        return true
     }
 }

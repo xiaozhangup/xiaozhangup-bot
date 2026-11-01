@@ -6,6 +6,7 @@ import me.xiaozhangup.bot.port.msg.MessageComponent
  * 引用回复（QQ 的"回复某条消息"）元数据组件，[context] 为被引用的原消息文本，
  * [sourceIds] 为被引用消息的消息 ID（[net.mamoe.mirai.message.data.MessageSource.ids]），
  * [components] 保留被引用消息的原始组件，
+ * [senderId] 为被引用消息的发送者账号，用于判断是否在回复本人。
  * 用于精确识别引用的究竟是哪一条消息。
  *
  * [asString] 返回空字符串：引用内容只作为元数据附加在消息上，不参与基于
@@ -15,7 +16,8 @@ import me.xiaozhangup.bot.port.msg.MessageComponent
 class QuoteComponent(
     content: String,
     val sourceIds: List<Int> = emptyList(),
-    val components: List<MessageComponent> = emptyList()
+    val components: List<MessageComponent> = emptyList(),
+    val senderId: String? = null
 ) : MessageComponent(Type.QUOTE, content) {
     override fun asString(): String = ""
 }

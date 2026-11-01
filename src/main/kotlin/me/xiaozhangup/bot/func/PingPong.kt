@@ -24,14 +24,14 @@ class PingPong : EventUnit(
         if (!enabledGroups.contains(message.source.id)) return
 
         val content = message.getMessage().trim()
-        if (content.equals("ping", ignoreCase = true)) {
+        if (content.equals("/ping", ignoreCase = true)) {
             message.addReply("pong")
         }
     }
 
     override fun onFriendMessage(message: Message) {
         val content = message.getMessage().trim()
-        if (content.equals("ping", ignoreCase = true)) {
+        if (content.equals("/ping", ignoreCase = true)) {
             message.addReply("pong")
         }
     }

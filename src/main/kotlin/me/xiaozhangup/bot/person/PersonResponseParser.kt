@@ -6,13 +6,14 @@ object PersonResponseParser {
     private const val SPILT_TOKEN = "<spilt>"
 
     fun parse(raw: String): List<String> {
-        val normalized = raw.replace("\r", "").trim()
+        val normalized = raw.replace("\r\n", "\n").replace('\r', '\n').trim()
         if (normalized.isEmpty()) return emptyList()
 
-        val withoutEmpty = normalized.replace(EMPTY_TOKEN, "").trim()
-        if (withoutEmpty.isEmpty()) return emptyList()
+        if (normalized == EMPTY_TOKEN) return emptyList()
+        require(EMPTY_TOKEN !in normalized) { "回复混用了 <empty> 与正文，已取消发送" }
+        require("\\<spilt>" !in normalized) { "分隔符不能带反斜杠，已取消发送" }
 
-        return withoutEmpty.split(SPILT_TOKEN)
+        return normalized.split(SPILT_TOKEN, "\n")
             .map { it.trim() }
             .filter { it.isNotEmpty() }
     }

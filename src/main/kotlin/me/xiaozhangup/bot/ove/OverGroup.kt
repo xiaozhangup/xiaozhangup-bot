@@ -11,13 +11,13 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.xiaozhangup.bot.port.Group
+import me.xiaozhangup.bot.client.QqFileTransfer
 import me.xiaozhangup.bot.port.GroupFile
 import me.xiaozhangup.bot.port.msg.MessageComponent
 import me.xiaozhangup.bot.util.asMessageChain
 import top.mrxiaom.overflow.action.ActionContext
 import top.mrxiaom.overflow.contact.RemoteBot
 import java.io.File
-import java.util.Base64
 
 class OverGroup(
     val oveGroup: net.mamoe.mirai.contact.Group
@@ -62,11 +62,7 @@ class OverGroup(
     }
 
     override suspend fun sendFile(file: File) {
-        executeAction("upload_group_file", buildJsonObject {
-            put("group_id", oveGroup.id.toString())
-            put("file", "base64://${Base64.getEncoder().encodeToString(file.readBytes())}")
-            put("name", file.name)
-        })
+        QqFileTransfer.shared.uploadFile(oveGroup.bot as RemoteBot, "group", id, file)
     }
 
     override suspend fun listFiles(): List<GroupFile> {

@@ -1,0 +1,18 @@
+# 复制为自定义名称.properties 后填写目标、文档，并改为 enabled=true；重启生效。
+enabled=false
+target.type=private
+target.id=
+
+# UTF-8 文档；相对路径以插件数据目录下的 person/ 为基准，也支持绝对路径。
+# 默认文档偏群聊；私聊请指定自己的私聊风格文档。
+prompt.file=my-chat-style-system-prompt.md
+
+history.size=80
+debounce.ms=2500
+# 仅群聊使用，避免连续消息让合并等待无限延长。
+group.max.wait.ms=10000
+
+# 每条（含第一条）发送前：min(max, base + 本条字符数 * char)
+send.base.delay.ms=600
+send.char.delay.ms=180
+send.max.delay.ms=8000

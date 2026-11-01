@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import java.io.BufferedWriter
 import java.io.File
@@ -18,7 +19,10 @@ import java.util.concurrent.atomic.AtomicLong
 internal class CodexAppServer(
     private val workingDirectory: File,
     private val onNotification: (JsonObject) -> Unit,
-    private val onStopped: () -> Unit
+    private val onStopped: () -> Unit,
+    private val command: () -> List<String> = ::codexAppServerCommand,
+    private val environment: Map<String, String> = emptyMap(),
+    private val onReady: (CodexAppServer) -> Unit = {}
 ) : AutoCloseable {
     private val ids = AtomicLong()
     private val pending = ConcurrentHashMap<Long, CompletableFuture<JsonObject>>()
@@ -48,13 +52,24 @@ internal class CodexAppServer(
         })
     }
 
+    fun respondError(id: JsonElement, message: String) {
+        send(buildJsonObject {
+            put("id", id)
+            put("error", buildJsonObject {
+                put("code", -32000)
+                put("message", message)
+            })
+        })
+    }
+
     @Synchronized
     private fun ensureStarted() {
         if (process?.isAlive == true) return
         check(!closing) { "Codex App Server 已关闭" }
 
-        val started = ProcessBuilder(codexAppServerCommand())
+        val started = ProcessBuilder(command())
             .directory(workingDirectory)
+            .apply { environment().putAll(this@CodexAppServer.environment) }
             .redirectError(ProcessBuilder.Redirect.INHERIT)
             .start()
         process = started
@@ -77,6 +92,7 @@ internal class CodexAppServer(
                 put("method", "initialized")
                 put("params", buildJsonObject {})
             })
+            onReady(this)
             initialized = true
         } catch (e: Exception) {
             runCatching { writer?.close() }
@@ -163,9 +179,9 @@ internal fun codexAppServerCommand() = listOf(
     "app-server",
     "--stdio",
     "-c",
-    "model=\"gpt-6-luna\"",
+    "model=\"gpt-6.1-terra\"",
     "-c",
-    "model_reasoning_effort=\"max\"",
+    "model_reasoning_effort=\"xhigh\"",
     "-c",
     "features.memories=false"
 )
@@ -180,4 +196,4 @@ internal class CodexRpcException(
 }
 
 internal fun JsonObject.string(key: String): String? =
-    runCatching { get(key)?.jsonPrimitive?.content }.getOrNull()
+    runCatching { get(key)?.jsonPrimitive?.contentOrNull }.getOrNull()

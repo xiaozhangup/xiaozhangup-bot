@@ -61,7 +61,8 @@ suspend fun asMessage(chain: MessageChain): List<MessageComponent> {
                 QuoteComponent(
                     original.contentToString().trim(),
                     msg.source.ids.toList(),
-                    asMessage(original)
+                    asMessage(original),
+                    msg.source.fromId.toString()
                 )
             }
 
